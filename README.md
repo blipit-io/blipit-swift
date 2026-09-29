@@ -4,10 +4,10 @@ Blipit error monitoring for iOS, macOS, tvOS and watchOS. Know your app broke be
 
 ## Install
 
-In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit`, or in `Package.swift`:
+In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit", from: "0.1.0")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.1.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
