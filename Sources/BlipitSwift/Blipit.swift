@@ -3,6 +3,8 @@ import Sentry
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
+    static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."
+    static let missingProjectWarning = "[blipit] Blipit.start got no project id, so Blipit is off and nothing is sent. Pass the id from the project's Keys page at app.blipit.io."
 
     public static func dsn(key: String, project: String, endpoint: String = defaultEndpoint) -> String {
         let host = (endpoint.components(separatedBy: "://").last ?? endpoint).replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
@@ -10,6 +12,7 @@ public enum Blipit {
         return "\(scheme)://\(key)@\(host)/\(project)"
     }
 
+    @discardableResult
     public static func configure(
         _ options: Options,
         key: String,
@@ -18,16 +21,23 @@ public enum Blipit {
         release: String? = nil,
         tracesSampleRate: Double = 0,
         endpoint: String = defaultEndpoint
-    ) {
-        precondition(!key.isEmpty, "Blipit.start needs the project's public key")
-        precondition(!project.isEmpty, "Blipit.start needs the project id")
+    ) -> Bool {
+        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let project = project.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty || project.isEmpty {
+            print(key.isEmpty ? missingKeyWarning : missingProjectWarning)
+            options.enabled = false
+            return false
+        }
         options.dsn = dsn(key: key, project: project, endpoint: endpoint)
         if let environment { options.environment = environment }
         options.releaseName = release
         options.tracesSampleRate = NSNumber(value: tracesSampleRate)
         options.sendDefaultPii = false
+        return true
     }
 
+    @discardableResult
     public static func start(
         key: String,
         project: String,
@@ -36,11 +46,14 @@ public enum Blipit {
         tracesSampleRate: Double = 0,
         endpoint: String = defaultEndpoint,
         configure extra: ((Options) -> Void)? = nil
-    ) {
+    ) -> Bool {
+        let probe = Options()
+        guard configure(probe, key: key, project: project) else { return false }
         SentrySDK.start { options in
             configure(options, key: key, project: project, environment: environment, release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint)
             extra?(options)
         }
+        return true
     }
 
     @discardableResult
@@ -53,6 +66,16 @@ public enum Blipit {
         let event = Event(level: level)
         event.message = SentryMessage(formatted: message)
         return SentrySDK.capture(event: event)
+    }
+
+    @discardableResult
+    public static func captureException(_ error: Error) -> SentryId {
+        capture(error: error)
+    }
+
+    @discardableResult
+    public static func captureMessage(_ message: String, level: SentryLevel = .info) -> SentryId {
+        capture(message: message, level: level)
     }
 
     public static func setUser(id: String?, email: String? = nil, username: String? = nil) {
