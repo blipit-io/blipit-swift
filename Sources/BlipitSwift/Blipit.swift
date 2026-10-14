@@ -3,6 +3,9 @@ import Sentry
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
+    public static let version = "0.3.0"
+    public static let packageName = "swiftpm:blipit-swift"
+    static var reporter: ReportClient?
     static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."
     static let missingProjectWarning = "[blipit] Blipit.start got no project id, so Blipit is off and nothing is sent. Pass the id from the project's Keys page at app.blipit.io."
 
@@ -34,7 +37,23 @@ public enum Blipit {
         options.releaseName = release
         options.tracesSampleRate = NSNumber(value: tracesSampleRate)
         options.sendDefaultPii = false
+        let user = options.beforeSend
+        options.beforeSend = { event in
+            identify(event)
+            return user.map { $0(event) } ?? event
+        }
+        reporter = ReportClient(endpoint: endpoint, key: key)
         return true
+    }
+
+    static func identify(_ event: Event) {
+        var sdk = event.sdk ?? [:]
+        var packages = sdk["packages"] as? [[String: Any]] ?? []
+        if !packages.contains(where: { $0["name"] as? String == packageName }) {
+            packages.append(["name": packageName, "version": version])
+            sdk["packages"] = packages
+            event.sdk = sdk
+        }
     }
 
     @discardableResult
@@ -52,6 +71,11 @@ public enum Blipit {
         SentrySDK.start { options in
             configure(options, key: key, project: project, environment: environment, release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint)
             extra?(options)
+            let custom = options.beforeSend
+            options.beforeSend = { event in
+                identify(event)
+                return custom.map { $0(event) } ?? event
+            }
         }
         return true
     }
