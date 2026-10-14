@@ -7,7 +7,7 @@ Blipit error monitoring for iOS, macOS, tvOS and watchOS. Know your app broke be
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.2.0")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.3.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -37,6 +37,17 @@ Blipit.flush()
 ```
 
 `capture(error:)` and `capture(message:level:)` still work and do the same thing.
+
+## Bug reports
+
+On iOS 15 and later, show the floating Report a bug button, or open the reporter from your own menu:
+
+```swift
+Blipit.showReportButton()
+Blipit.showReport()
+```
+
+The reporter asks first: Take a screenshot, Record a video (in-app ReplayKit, only your app is recorded) or Skip. The screenshot opens full screen with the tools above and below it; pinch or double-tap to zoom, mark the problem, then add a title and what happened and send. Reports arrive under Bug reports at app.blipit.io.
 
 ## Performance
 
