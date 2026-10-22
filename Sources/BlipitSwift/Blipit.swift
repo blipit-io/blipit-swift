@@ -5,7 +5,7 @@ import BlipitNuggets
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
-    public static let version = "0.4.0"
+    public static let version = "0.5.0"
     public static let packageName = "swiftpm:blipit-swift"
     static var reporter: ReportClient?
     static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."

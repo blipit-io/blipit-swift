@@ -264,13 +264,12 @@ enum Stuck {
     }
 
     static func flush() {
-        guard let client = Blipit.reporter, !pending.isEmpty else { return }
+        guard let nuggets = Nuggets.shared, !pending.isEmpty else { return }
         let batch = pending
         pending = []
+        guard nuggets.active else { return }
         for body in batch {
-            client.event(body) { delivered in
-                if !delivered { queue.async { if pending.count < 10 { pending.append(body) } } }
-            }
+            if let event = nuggets.applyHooks(body) { nuggets.transport.enqueue("/api/v1/events", event) }
         }
     }
 

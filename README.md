@@ -2,14 +2,14 @@
 
 Blipit error monitoring for iOS, macOS, tvOS and watchOS. Know your app broke before your users tell you.
 
-Since 0.4.0 the package runs on blipit-nuggets, Blipit's own crash and error core. It has no third-party dependencies and talks only to Blipit, in Blipit's own event format.
+Since 0.5.0 the package runs on blipit-nuggets, Blipit's own crash and error core. It has no third-party dependencies and talks only to Blipit, in Blipit's own event format.
 
 ## Install
 
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.4.0")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.5.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -69,7 +69,7 @@ Blipit.start(key: "<public key>", project: "<project id>") { options in
 
 ## Offline, rate limits and consent
 
-Events, sessions and spans are written to a queue in the app's Application Support folder (Caches on tvOS), excluded from backups, and sent in order. Without a connection or on a server error they wait and are retried with back-off, also after the next launch; the queue keeps the newest 100. On HTTP 429 nothing is sent until the `Retry-After` time has passed, also across launches. An invalid key stops sending for the rest of the run.
+Events, sessions, stuck reports and spans are written to a queue in the app's Application Support folder (Caches on tvOS), excluded from backups, and sent in order. Without a connection or on a server error they wait and are retried with back-off, also after the next launch; the queue keeps the newest 100. On HTTP 429 nothing is sent until the `Retry-After` time has passed, also across launches. An invalid key stops sending for the rest of the run.
 
 ```swift
 Blipit.setConsent(false)
@@ -116,7 +116,7 @@ Pass `tracesSampleRate: 0.2` to `start` and the app start, UIKit screen loads an
 
 `Blipit.crash()` crashes the app on purpose. Run the app without the debugger (stop it in Xcode, then open it from the home screen), tap the button that calls it, open the app again, and the crash shows up at app.blipit.io.
 
-## Upgrading from 0.3
+## Upgrading from 0.4
 
 - `Options` is now Blipit's own class with the fields listed above; code that set other fields in the `configure` closure must drop them.
 - `capture...` returns `EventId` and `level:` takes `Level` (`.fatal`, `.error`, `.warning`, `.info`, `.debug`).

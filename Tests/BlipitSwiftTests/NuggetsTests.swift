@@ -524,6 +524,23 @@ final class NuggetsTests: XCTestCase {
         XCTAssertNotNil((spans?.first?["traceId"] as? String)?.range(of: "^[0-9a-f]{32}$", options: .regularExpression))
     }
 
+    func testStuckReportsGoThroughTheNuggetsQueue() throws {
+        ScriptedProtocol.reset()
+        let nuggets = make()
+        Nuggets.shared = nuggets
+        let body = StuckEvent.build(stuck: ["kind": "flow", "flow": "sign-in", "waited_ms": 61_000], trail: [], release: nuggets.release, environment: "test", os: DeviceInfo.osVersion, model: DeviceInfo.model)
+        Stuck.queue.sync {
+            Stuck.pending = [body]
+            Stuck.flush()
+        }
+        drain(nuggets)
+        let sent = try XCTUnwrap(ScriptedProtocol.requests.first)
+        XCTAssertEqual(sent.path, "/api/v1/events")
+        XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
+        XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.5.0")
+    }
+
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../Sources/BlipitSwift/PrivacyInfo.xcprivacy").standardized
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])
