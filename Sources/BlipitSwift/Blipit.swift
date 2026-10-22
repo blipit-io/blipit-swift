@@ -1,5 +1,7 @@
 import Foundation
-import Sentry
+#if canImport(BlipitNuggets)
+import BlipitNuggets
+#endif
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
@@ -8,12 +10,6 @@ public enum Blipit {
     static var reporter: ReportClient?
     static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."
     static let missingProjectWarning = "[blipit] Blipit.start got no project id, so Blipit is off and nothing is sent. Pass the id from the project's Keys page at app.blipit.io."
-
-    public static func dsn(key: String, project: String, endpoint: String = defaultEndpoint) -> String {
-        let host = (endpoint.components(separatedBy: "://").last ?? endpoint).replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        let scheme = endpoint.hasPrefix("http://") ? "http" : "https"
-        return "\(scheme)://\(key)@\(host)/\(project)"
-    }
 
     @discardableResult
     public static func configure(
@@ -32,28 +28,14 @@ public enum Blipit {
             options.enabled = false
             return false
         }
-        options.dsn = dsn(key: key, project: project, endpoint: endpoint)
+        options.key = key
+        options.project = project
+        options.endpoint = endpoint
         if let environment { options.environment = environment }
-        options.releaseName = release
-        options.tracesSampleRate = NSNumber(value: tracesSampleRate)
-        options.sendDefaultPii = false
-        let user = options.beforeSend
-        options.beforeSend = { event in
-            identify(event)
-            return user.map { $0(event) } ?? event
-        }
+        options.release = release
+        options.tracesSampleRate = tracesSampleRate
         reporter = ReportClient(endpoint: endpoint, key: key)
         return true
-    }
-
-    static func identify(_ event: Event) {
-        var sdk = event.sdk ?? [:]
-        var packages = sdk["packages"] as? [[String: Any]] ?? []
-        if !packages.contains(where: { $0["name"] as? String == packageName }) {
-            packages.append(["name": packageName, "version": version])
-            sdk["packages"] = packages
-            event.sdk = sdk
-        }
     }
 
     @discardableResult
@@ -68,18 +50,15 @@ public enum Blipit {
         startupDeadline: TimeInterval = 0,
         configure extra: ((Options) -> Void)? = nil
     ) -> Bool {
-        let probe = Options()
-        guard configure(probe, key: key, project: project) else { return false }
-        SentrySDK.start { options in
-            configure(options, key: key, project: project, environment: environment, release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint)
-            extra?(options)
-            let custom = options.beforeSend
-            options.beforeSend = { event in
-                identify(event)
-                return custom.map { $0(event) } ?? event
-            }
-        }
-        Stuck.setup(release: release, environment: environment, waitForReady: waitForReady || startupDeadline > 0)
+        let options = Options()
+        guard configure(options, key: key, project: project, environment: environment, release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint) else { return false }
+        extra?(options)
+        guard options.enabled, Nuggets.shared == nil else { return options.enabled }
+        let nuggets = Nuggets(options: options)
+        Nuggets.shared = nuggets
+        nuggets.boot()
+        Auto.install(nuggets)
+        Stuck.setup(release: nuggets.release, environment: options.environment, waitForReady: waitForReady || startupDeadline > 0)
         return true
     }
 
@@ -100,44 +79,70 @@ public enum Blipit {
         if let name = StuckEvent.name(name, max: 64) { Stuck.end(name) }
     }
 
+    @inline(never)
     @discardableResult
-    public static func capture(error: Error) -> SentryId {
-        SentrySDK.capture(error: error)
+    public static func capture(error: Error) -> EventId {
+        var frames = [UInt](repeating: 0, count: 128)
+        let count = Int(bn_backtrace(&frames, 128, 1))
+        return Nuggets.shared?.capture(error: error, addresses: Array(frames.prefix(count))) ?? .empty
     }
 
     @discardableResult
-    public static func capture(message: String, level: SentryLevel = .info) -> SentryId {
-        let event = Event(level: level)
-        event.message = SentryMessage(formatted: message)
-        return SentrySDK.capture(event: event)
+    public static func capture(message: String, level: Level = .info) -> EventId {
+        Nuggets.shared?.capture(message: message, level: level) ?? .empty
+    }
+
+    @inline(never)
+    @discardableResult
+    public static func captureException(_ error: Error) -> EventId {
+        var frames = [UInt](repeating: 0, count: 128)
+        let count = Int(bn_backtrace(&frames, 128, 1))
+        return Nuggets.shared?.capture(error: error, addresses: Array(frames.prefix(count))) ?? .empty
     }
 
     @discardableResult
-    public static func captureException(_ error: Error) -> SentryId {
-        capture(error: error)
-    }
-
-    @discardableResult
-    public static func captureMessage(_ message: String, level: SentryLevel = .info) -> SentryId {
+    public static func captureMessage(_ message: String, level: Level = .info) -> EventId {
         capture(message: message, level: level)
     }
 
     public static func setUser(id: String?, email: String? = nil, username: String? = nil) {
-        let user = User()
-        user.userId = id
-        user.email = email
-        user.username = username
-        SentrySDK.setUser(user)
+        guard let nuggets = Nuggets.shared else { return }
+        var user: [String: String] = [:]
+        if let id { user["id"] = Json.cut(id, 128) }
+        if let email { user["email"] = Json.cut(email, 256) }
+        if let username { user["username"] = Json.cut(username, 128) }
+        nuggets.scope.setUser(user.isEmpty ? nil : user)
+        nuggets.scopeChanged()
     }
 
     public static func setTag(_ key: String, _ value: String) {
-        SentrySDK.configureScope { scope in scope.setTag(value: value, key: key) }
+        guard let nuggets = Nuggets.shared else { return }
+        nuggets.scope.setTag(key, value)
+        nuggets.scopeChanged()
     }
 
-    public static func addBreadcrumb(_ message: String, category: String = "default", level: SentryLevel = .info) {
-        let crumb = Breadcrumb(level: level, category: category)
-        crumb.message = message
-        SentrySDK.addBreadcrumb(crumb)
+    public static func setContext(_ key: String, _ value: [String: Any]?) {
+        guard let nuggets = Nuggets.shared else { return }
+        nuggets.scope.setContext(key, value)
+        nuggets.scopeChanged()
+    }
+
+    public static func addBreadcrumb(_ message: String, category: String = "custom", level: Level = .info, data: [String: Any]? = nil) {
+        guard let nuggets = Nuggets.shared else { return }
+        nuggets.scope.add(message, category: category, level: level, data: data)
+        nuggets.scopeChanged()
+    }
+
+    public static func setConsent(_ granted: Bool) {
+        Nuggets.shared?.setConsent(granted)
+    }
+
+    public static var hasConsent: Bool {
+        Nuggets.shared?.consent ?? true
+    }
+
+    public static func crash() {
+        bn_crash(0)
     }
 
     public static func securityContext(
@@ -158,6 +163,9 @@ public enum Blipit {
         return context
     }
 
+    static let securityKinds: Set<String> = ["login_failed", "login_succeeded", "login_blocked", "password_reset_requested", "privilege_granted"]
+    static let securityLimits = ["actor": 256, "actor_id": 128, "ip": 45, "user_agent": 512, "outcome": 64, "target": 256]
+
     @discardableResult
     public static func captureSecurity(
         kind: String,
@@ -167,18 +175,19 @@ public enum Blipit {
         ip: String? = nil,
         userAgent: String? = nil,
         target: String? = nil
-    ) -> SentryId {
-        let context = securityContext(kind: kind, actor: actor, outcome: outcome, actorId: actorId, ip: ip, userAgent: userAgent, target: target)
-        let level: SentryLevel = kind == "login_failed" || kind == "login_blocked" ? .warning : .info
-        let event = Event(level: level)
-        event.message = SentryMessage(formatted: "\(kind) for \(actor)")
-        return SentrySDK.capture(event: event) { scope in
-            scope.setContext(value: context, key: "security")
-            scope.setTag(value: kind, key: "security.kind")
-        }
+    ) -> EventId {
+        guard let nuggets = Nuggets.shared, securityKinds.contains(kind), !actor.trimmingCharacters(in: .whitespaces).isEmpty else { return .empty }
+        var context = securityContext(kind: kind, actor: actor, outcome: outcome, actorId: actorId, ip: ip, userAgent: userAgent, target: target)
+        for (field, max) in securityLimits { context[field] = context[field].map { Json.cut($0, max) } }
+        let level: Level = kind == "login_failed" || kind == "login_blocked" || kind == "privilege_granted" ? .warning : .info
+        return nuggets.send(nuggets.event(["message": "\(kind) for \(context["actor"] ?? actor)", "level": level.rawValue, "security": context]))
     }
 
     public static func flush(timeout: TimeInterval = 2) {
-        SentrySDK.flush(timeout: timeout)
+        guard let nuggets = Nuggets.shared else { return }
+        Auto.tracer?.flush()
+        let done = DispatchSemaphore(value: 0)
+        nuggets.transport.flush { done.signal() }
+        _ = done.wait(timeout: .now() + timeout)
     }
 }

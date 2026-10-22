@@ -1,5 +1,4 @@
 import XCTest
-import Sentry
 @testable import BlipitSwift
 #if os(iOS)
 import UIKit
@@ -134,19 +133,11 @@ final class ReportTests: XCTestCase {
         XCTAssertEqual(StubProtocol.log.first { $0.method == "PUT" }?.body.count, 2048)
     }
 
-    func testEventsCarryTheBlipitPackage() {
+    func testConfigureGivesTheReporterItsKey() {
         let options = Options()
         XCTAssertTrue(Blipit.configure(options, key: "blipit_pk_abc", project: "7"))
-        let event = Event(level: .error)
-        event.sdk = ["name": "sentry.cocoa", "packages": [["name": "spm:getsentry/sentry-cocoa", "version": "8.0.0"]]]
-        let out = options.beforeSend?(event)
-        let packages = out?.sdk?["packages"] as? [[String: Any]]
-        XCTAssertEqual(packages?.count, 2)
-        XCTAssertEqual(packages?.last?["name"] as? String, "swiftpm:blipit-swift")
-        XCTAssertEqual(packages?.last?["version"] as? String, Blipit.version)
-        _ = options.beforeSend?(out!)
-        XCTAssertEqual((out?.sdk?["packages"] as? [[String: Any]])?.count, 2)
-        XCTAssertNotNil(Blipit.reporter)
+        XCTAssertEqual(Blipit.reporter?.key, "blipit_pk_abc")
+        XCTAssertEqual(Blipit.reporter?.endpoint, "https://in.blipit.io")
     }
 
     #if os(iOS)

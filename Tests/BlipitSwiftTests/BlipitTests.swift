@@ -1,21 +1,17 @@
 import XCTest
-import Sentry
 @testable import BlipitSwift
 
 final class BlipitTests: XCTestCase {
-    func testDsnIsBuiltFromKeyAndProject() {
-        XCTAssertEqual(Blipit.dsn(key: "blipit_pk_abc", project: "7"), "https://blipit_pk_abc@in.blipit.io/7")
-        XCTAssertEqual(Blipit.dsn(key: "k", project: "9", endpoint: "http://127.0.0.1:8080/"), "http://k@127.0.0.1:8080/9")
-    }
-
-    func testConfigureSetsDsnAndOptions() {
+    func testConfigureFillsBlipitOptions() {
         let options = Options()
-        XCTAssertTrue(Blipit.configure(options, key: "blipit_pk_abc", project: "7", environment: "test", release: "app@1.0.0", tracesSampleRate: 0.2))
-        XCTAssertEqual(options.dsn, "https://blipit_pk_abc@in.blipit.io/7")
+        XCTAssertTrue(Blipit.configure(options, key: " blipit_pk_abc ", project: "7", environment: "test", release: "app@1.0.0", tracesSampleRate: 0.2, endpoint: "http://127.0.0.1:8080/"))
+        XCTAssertEqual(options.key, "blipit_pk_abc")
+        XCTAssertEqual(options.project, "7")
         XCTAssertEqual(options.environment, "test")
-        XCTAssertEqual(options.releaseName, "app@1.0.0")
-        XCTAssertEqual(options.tracesSampleRate?.doubleValue, 0.2)
-        XCTAssertFalse(options.sendDefaultPii)
+        XCTAssertEqual(options.release, "app@1.0.0")
+        XCTAssertEqual(options.tracesSampleRate, 0.2)
+        XCTAssertEqual(options.endpoint, "http://127.0.0.1:8080/")
+        XCTAssertTrue(options.enabled)
     }
 
     func testSecurityContextDropsEmptyFields() {
@@ -32,9 +28,10 @@ final class BlipitTests: XCTestCase {
     }
 
     func testCaptureAliasesMatchOtherSdks() {
-        let fromAlias: (Error) -> SentryId = Blipit.captureException
-        let fromMessage: (String, SentryLevel) -> SentryId = Blipit.captureMessage
+        let fromAlias: (Error) -> EventId = Blipit.captureException
+        let fromMessage: (String, Level) -> EventId = Blipit.captureMessage
         XCTAssertNotNil(fromAlias)
         XCTAssertNotNil(fromMessage)
+        XCTAssertEqual(Blipit.captureMessage("before start", level: .warning), .empty)
     }
 }

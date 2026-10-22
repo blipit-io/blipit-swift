@@ -7,11 +7,9 @@ let package = Package(
     products: [
         .library(name: "BlipitSwift", targets: ["BlipitSwift"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.0.0"),
-    ],
     targets: [
-        .target(name: "BlipitSwift", dependencies: [.product(name: "Sentry", package: "sentry-cocoa")], resources: [.copy("PrivacyInfo.xcprivacy")]),
-        .testTarget(name: "BlipitSwiftTests", dependencies: ["BlipitSwift"]),
+        .target(name: "BlipitNuggets"),
+        .target(name: "BlipitSwift", dependencies: ["BlipitNuggets"], resources: [.copy("PrivacyInfo.xcprivacy")]),
+        .testTarget(name: "BlipitSwiftTests", dependencies: ["BlipitSwift", "BlipitNuggets"]),
     ]
 )
