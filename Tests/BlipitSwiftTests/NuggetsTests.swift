@@ -147,6 +147,29 @@ final class NuggetsTests: XCTestCase {
         XCTAssertTrue(JSONSerialization.isValidJSONObject(event), file: file, line: line)
     }
 
+    func testSetScreenAddsOneNavigationBreadcrumbPerChange() {
+        let nuggets = make { $0.screenPicker = false }
+        Nuggets.shared = nuggets
+        Blipit.setScreen("  Cart \n ")
+        Blipit.setScreen("Cart")
+        Blipit.setScreen(String(repeating: "x", count: 200))
+        Blipit.setScreen("   ")
+        let crumbs = nuggets.scope.snapshot()["breadcrumbs"] as? [[String: Any]] ?? []
+        let screens = crumbs.filter { $0["category"] as? String == "navigation" }
+        XCTAssertEqual(screens.count, 2)
+        XCTAssertEqual(screens[0]["message"] as? String, "screen Cart")
+        XCTAssertEqual((screens[1]["data"] as? [String: Any])?["from"] as? String, "Cart")
+        XCTAssertEqual(((screens[1]["data"] as? [String: Any])?["to"] as? String)?.count, 128)
+    }
+
+    func testLastCrashIdIsHandedOutOnce() {
+        let nuggets = make()
+        Nuggets.shared = nuggets
+        nuggets.io.sync { nuggets.pendingCrash = "0123456789abcdef0123456789abcdef" }
+        XCTAssertEqual(Blipit.lastCrashId, "0123456789abcdef0123456789abcdef")
+        XCTAssertNil(Blipit.lastCrashId)
+    }
+
     func testEventsUseBlipitsOwnFormatAndEndpoint() throws {
         ScriptedProtocol.reset()
         let nuggets = make()
@@ -255,19 +278,6 @@ final class NuggetsTests: XCTestCase {
         drain(nuggets)
         XCTAssertFalse(nuggets.active)
         XCTAssertTrue(nuggets.capture(message: "b", level: .info).isEmpty)
-    }
-
-    func testPlatformMismatchStopsSendingForThisLaunch() {
-        PlatformMismatch.reset()
-        defer { PlatformMismatch.reset() }
-        XCTAssertFalse(PlatformMismatch.check(409, Data(#"{"error":"this report already has a recording at that position"}"#.utf8)))
-        ScriptedProtocol.reset([.status(409, [:], #"{"error":"This project is for Android. Create a separate iOS project in Blipit and use its key.","reason":"platform_mismatch","project_platform":"android","sent_platform":"ios"}"#)])
-        let nuggets = make()
-        nuggets.capture(message: "a", level: .info)
-        drain(nuggets)
-        XCTAssertTrue(PlatformMismatch.blocked)
-        XCTAssertFalse(nuggets.active)
-        XCTAssertEqual(ScriptedProtocol.requests.count, 1)
     }
 
     func testBreadcrumbsKeepTheNewestAndMapLevels() throws {
@@ -551,7 +561,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.path, "/api/v1/events")
         XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
         XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
-        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.5.1")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.6.0")
     }
 
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {

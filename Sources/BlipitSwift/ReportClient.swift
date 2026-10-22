@@ -65,7 +65,7 @@ public enum ReportPayload {
         }
     }
 
-    public static func feedback(title: String, message: String, email: String?, context: [String: Any], shapes: [ReportShape], imageSize: CGSize?, screenshots: Int, recordings: Int, locale: String) -> [String: Any] {
+    public static func feedback(title: String, message: String, email: String?, context: [String: Any], shapes: [ReportShape], imageSize: CGSize?, screenshots: Int, recordings: Int, locale: String, eventId: String? = nil) -> [String: Any] {
         var body: [String: Any] = [
             "message": message,
             "kind": "bug",
@@ -77,6 +77,7 @@ public enum ReportPayload {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty { body["title"] = title }
         if let email = email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty { body["email"] = email }
+        if let eventId = eventId.flatMap(ReportSettings.crashId) { body["event_id"] = eventId }
         if let size = imageSize {
             let list = annotations(shapes, size: size)
             if !list.isEmpty { body["annotations"] = [["position": 0, "shapes": list]] }
@@ -117,6 +118,17 @@ public final class ReportClient {
         run(URLRequest(url: url("/api/v1/feedback/settings"))) { result in
             guard case let .success(data) = result, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return done(false, 60_000) }
             done(json["recording"] as? Bool ?? false, json["recording_max_ms"] as? Int ?? 60_000)
+        }
+    }
+
+    public func buttonSettings(userId: String?, email: String?, _ done: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: url("/api/v1/feedback/settings"))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let userId, !userId.isEmpty { request.setValue(userId, forHTTPHeaderField: "X-Blipit-User-Id") }
+        if let email, !email.isEmpty { request.setValue(email, forHTTPHeaderField: "X-Blipit-User-Email") }
+        run(request) { result in
+            guard case let .success(data) = result else { return done(false) }
+            done(ReportSettings.button(try? JSONSerialization.jsonObject(with: data)))
         }
     }
 

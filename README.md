@@ -65,7 +65,7 @@ Blipit.start(key: "<public key>", project: "<project id>") { options in
 }
 ```
 
-`enabled`, `environment`, `release`, `sampleRate` (errors only, never crashes), `tracesSampleRate`, `maxBreadcrumbs` (up to 100), `debug`, `crashes`, `machExceptions`, `hangs`, `hangThreshold`, `watchdogTerminations`, `sessions`, `networkBreadcrumbs`, `screenBreadcrumbs`, `lifecycleBreadcrumbs`, `beforeSend` (gets and returns the event as Blipit JSON; return `nil` to drop it) and `directory` (where queued events wait).
+`enabled`, `environment`, `release`, `sampleRate` (errors only, never crashes), `tracesSampleRate`, `maxBreadcrumbs` (up to 100), `debug`, `crashes`, `machExceptions`, `hangs`, `hangThreshold`, `watchdogTerminations`, `sessions`, `networkBreadcrumbs`, `screenBreadcrumbs`, `lifecycleBreadcrumbs`, `shakeToReport`, `screenshotToReport`, `twoFingerReport`, `reportAfterCrash`, `screenPicker` (see Bug reports), `beforeSend` (gets and returns the event as Blipit JSON; return `nil` to drop it) and `directory` (where queued events wait).
 
 ## Offline, rate limits and consent
 
@@ -108,6 +108,34 @@ Blipit.showReport()
 
 The reporter asks first: Take a screenshot, Record a video (in-app ReplayKit, only your app is recorded) or Skip. The screenshot opens full screen with the tools above and below it; pinch or double-tap to zoom, mark the problem, then add a title and what happened and send. Reports arrive under Bug reports at app.blipit.io.
 
+### Report from the screen with the bug
+
+A Report a bug item in a Profile or Settings menu means the screenshot shows that menu, not the screen where the bug was. Turn on any of these so people can report from where they are:
+
+```swift
+Blipit.start(key: "<public key>", project: "<project id>") { options in
+    options.shakeToReport = true
+    options.screenshotToReport = true
+    options.twoFingerReport = true
+    options.reportAfterCrash = true
+}
+Blipit.setUser(id: "42", email: "ana@example.com")
+```
+
+- `shakeToReport` (off by default): shaking the phone opens the reporter on the current screen. One shake opens one reporter, never while a reporter or a Blipit prompt is open.
+- `screenshotToReport` (off by default): when the person takes a normal iOS screenshot in your app, a small prompt asks "Report a bug with this screen?" with Report and Not now, and goes away after 6 seconds. Report opens the reporter with Blipit's own capture of the screen. The SDK never reads the photo library; it only learns that a screenshot happened.
+- `twoFingerReport` (off by default): a two-finger press and hold of about one second anywhere opens the reporter. It only watches touches; your buttons, scrolls and gestures keep working.
+- `reportAfterCrash` (off by default): on the first launch after a crash Blipit caught, a prompt asks "The app closed unexpectedly. Tell us what you were doing?". Tell us opens the reporter (text only or with a screenshot) and links the report to that crash, so the crash issue shows the report and the report shows the crash. It asks once per crash.
+- `screenPicker` (on by default, it only changes the reporter): when you open the reporter from your own code with `Blipit.showReport()`, Take a screenshot asks "Which screen is the bug on?" with the current screen and up to 3 screens the person saw before it. The earlier screens are small snapshots kept in memory only: never on disk, never in crash files or logs, password fields blacked out, cleared after 3 minutes in the background or when consent is turned off. Only the screen the person picks is uploaded. Snapshots are taken for your own view controllers about 0.7 s after each one appears. SwiftUI screens are not view controllers of their own, so name them with `Blipit.setScreen`, which also adds the screen breadcrumb:
+
+  ```swift
+  CartView()
+      .onAppear { Blipit.setScreen("Cart") }
+  ```
+- Floating button for testers: in the dashboard, Project settings, Bug reports, set Floating button on phone apps to Off, Everyone or Testers only and list the testers' user ids or emails. The SDK sends the id and email you set with `Blipit.setUser` and Blipit answers only yes or no, so the tester list never reaches the app. `Blipit.showReportButton()` still shows the button whatever the setting says.
+
+React Native and Flutter use the same native triggers through `Blipit.setReportHandler { trigger, crashId in }`, which hands the trigger to your own reporter instead of opening this one, and `Blipit.promptAfterCrash(_:)` for a crash caught outside Swift. `Blipit.lastCrashId` returns the last caught crash once.
+
 ## Performance
 
 Pass `tracesSampleRate: 0.2` to `start` and the app start, UIKit screen loads and `URLSession` requests are sent as spans to the Performance page.
@@ -139,6 +167,7 @@ Pass `tracesSampleRate: 0.2` to `start` and the app start, UIKit screen loads an
   - `setUser(email:)` or an email typed in the bug reporter: Contact Info, Email Address, linked to the user.
   - Bug reports: User Content, Other User Content (text, screenshots, screen recordings), App Functionality.
 - No private APIs. Crash capture uses public POSIX signal APIs and public Mach APIs from the SDK headers; breadcrumbs swap `UIViewController.viewDidLoad`/`viewDidAppear` and `URLSessionTask.resume` through the public Objective-C runtime.
+- The report triggers use only public UIKit: shake is the UIKit motion event (`motionEnded` with `.motionShake`, reached by swapping `UIWindow.motionEnded` once through the public Objective-C runtime and calling the original), not CoreMotion, so there is no motion permission, no `NSMotionUsageDescription` and nothing to declare. Screenshot to report listens to `UIApplication.userDidTakeScreenshotNotification`, which needs no permission and gives no access to the image or the photo library. The two-finger press is a standard `UILongPressGestureRecognizer` that never cancels or delays your touches. No new required-reason API, so `PrivacyInfo.xcprivacy` is unchanged.
 - No background modes, no entitlements and no Info.plist keys are needed. Screen recording in the bug reporter is in-app ReplayKit and asks the user every time.
 - Data goes only to `in.blipit.io` (or the `endpoint` you pass), over HTTPS.
 

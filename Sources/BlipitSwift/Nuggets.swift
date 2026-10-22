@@ -37,6 +37,11 @@ public final class Options {
     public var networkBreadcrumbs = true
     public var screenBreadcrumbs = true
     public var lifecycleBreadcrumbs = true
+    public var shakeToReport = false
+    public var screenshotToReport = false
+    public var twoFingerReport = false
+    public var reportAfterCrash = false
+    public var screenPicker = true
     public var beforeSend: (([String: Any]) -> [String: Any]?)?
     public var directory: URL?
     var urlSession: URLSession?
@@ -420,6 +425,7 @@ final class Nuggets {
     let release: String?
     var previous: [String: Any]?
     var run: [String: Any] = [:]
+    var pendingCrash: String?
     var scopeDirty = false
     var consent = true
     let consentFile: URL

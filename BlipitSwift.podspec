@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = "BlipitSwift"
-  s.version = "0.5.1"
+  s.version = "0.6.0"
   s.summary = "Blipit error monitoring for iOS, macOS, tvOS and watchOS, on blipit-nuggets."
   s.homepage = "https://docs.blipit.io/mobile"
   s.license = { :type => "MIT" }
