@@ -1,3 +1,6 @@
+## 0.5.1
+- Platform mismatch: when Blipit refuses data because the key belongs to a project for another platform (HTTP 409 platform_mismatch), the SDK logs one clear error and stops sending for the rest of the launch. Crash reports, sessions, events and bug reports all stop; the message shows in the Xcode console. When this branch merges with the 0.6.0 shake and screenshot release, 0.6.0 folds this in.
+
 ## 0.5.0
 - Runs on blipit-nuggets, Blipit's own crash and error core. The package has no third-party dependencies any more and sends only Blipit's own format to `/api/v1/events`, `/api/v1/sessions` and `/v1/traces`.
 - Crashes from signals and, on iOS and macOS, Mach exceptions are written to a small file at crash time and symbolicated and sent on the next launch with that run's breadcrumbs, user, tags and release. Uncaught `NSException`s keep their name, reason and stack.

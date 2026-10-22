@@ -99,12 +99,16 @@ public final class ReportClient {
     func url(_ path: String) -> URL { URL(string: endpoint + path)! }
 
     func run(_ request: URLRequest, _ done: @escaping (Result<Data, Error>) -> Void) {
+        if PlatformMismatch.blocked { return done(.failure(ReportError.http(409))) }
         var request = request
         request.setValue(key, forHTTPHeaderField: "X-Blipit-Key")
         session.dataTask(with: request) { data, response, error in
             if let error { return done(.failure(error)) }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            guard (200..<300).contains(status) else { return done(.failure(ReportError.http(status))) }
+            guard (200..<300).contains(status) else {
+                PlatformMismatch.check(status, data)
+                return done(.failure(ReportError.http(status)))
+            }
             done(.success(data ?? Data()))
         }.resume()
     }

@@ -319,7 +319,7 @@ final class Transport {
     func pump(_ done: (() -> Void)? = nil) {
         if let done { waiters.append(done) }
         guard !sending else { return }
-        guard !stopped, Date() >= blockedUntil, let next = pending().first else { return finish() }
+        guard !stopped, !PlatformMismatch.blocked, Date() >= blockedUntil, let next = pending().first else { return finish() }
         guard let item = Json.read(next), let path = item["path"] as? String, let body = item["body"] as? [String: Any] else {
             try? FileManager.default.removeItem(at: next)
             return pump()
@@ -385,6 +385,7 @@ final class Transport {
         case 200..<300: return .delivered
         case 429: return response.map { .limited(retryAfter($0, data)) } ?? .limited(60)
         case 401: return .refused
+        case 409 where PlatformMismatch.check(status, data): return .refused
         case 403:
             let reason = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }?["reason"] as? String
             return reason == "security_needs_secret_key" ? .drop : .refused

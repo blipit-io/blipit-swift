@@ -9,7 +9,7 @@ Since 0.5.0 the package runs on blipit-nuggets, Blipit's own crash and error cor
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.5.0")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.5.1")
 ```
 
 and add `BlipitSwift` to your target's dependencies.

@@ -257,6 +257,19 @@ final class NuggetsTests: XCTestCase {
         XCTAssertTrue(nuggets.capture(message: "b", level: .info).isEmpty)
     }
 
+    func testPlatformMismatchStopsSendingForThisLaunch() {
+        PlatformMismatch.reset()
+        defer { PlatformMismatch.reset() }
+        XCTAssertFalse(PlatformMismatch.check(409, Data(#"{"error":"this report already has a recording at that position"}"#.utf8)))
+        ScriptedProtocol.reset([.status(409, [:], #"{"error":"This project is for Android. Create a separate iOS project in Blipit and use its key.","reason":"platform_mismatch","project_platform":"android","sent_platform":"ios"}"#)])
+        let nuggets = make()
+        nuggets.capture(message: "a", level: .info)
+        drain(nuggets)
+        XCTAssertTrue(PlatformMismatch.blocked)
+        XCTAssertFalse(nuggets.active)
+        XCTAssertEqual(ScriptedProtocol.requests.count, 1)
+    }
+
     func testBreadcrumbsKeepTheNewestAndMapLevels() throws {
         let scope = Scope()
         scope.max = 3
@@ -538,7 +551,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.path, "/api/v1/events")
         XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
         XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
-        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.5.0")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.5.1")
     }
 
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {
