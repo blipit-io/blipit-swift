@@ -193,7 +193,7 @@ enum Auto {
             DeviceInfo.readScreen()
             lifecycle(nuggets)
             #if os(iOS) || os(tvOS)
-            if nuggets.options.screenBreadcrumbs || tracer != nil { Screens.install() }
+            if nuggets.options.screenBreadcrumbs || nuggets.options.screenPicker || tracer != nil { Screens.install() }
             #endif
         }
     }
@@ -295,6 +295,9 @@ enum Screens {
             nuggets.scopeChanged()
         }
         current = name
+        #if os(iOS)
+        if nuggets.options.screenPicker, #available(iOS 15.0, *) { ReportTriggers.screenAppeared(name) }
+        #endif
         if let start = objc_getAssociatedObject(controller, &key) as? Date {
             objc_setAssociatedObject(controller, &key, nil, .OBJC_ASSOCIATION_RETAIN)
             if let tracer = Auto.tracer, tracer.sampled() {

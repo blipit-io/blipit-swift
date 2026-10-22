@@ -293,7 +293,10 @@ extension Nuggets {
             guard active else { return }
             if let text, let report = CrashReport.parse(text) {
                 log("found a crash from the last run, sending it")
-                if let event = applyHooks(report.event(self, scope: saved)) { transport.enqueue("/api/v1/events", event) }
+                if let event = applyHooks(report.event(self, scope: saved)) {
+                    transport.enqueue("/api/v1/events", event)
+                    pendingCrash = event["event_id"] as? String
+                }
                 Sessions.close(previous, as: "crashed", nuggets: self)
             } else if Nuggets.watchdogSupported, killedInForeground(previous) {
                 let hang = previous?["hang"] as? [String: Any]

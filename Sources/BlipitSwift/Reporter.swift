@@ -14,6 +14,7 @@ enum ReportTheme {
 @available(iOS 15.0, *)
 extension Blipit {
     static var reportButton: UIButton?
+    static var buttonWanted = false
 
     public static func showReport() {
         guard let client = reporter else {
@@ -21,42 +22,65 @@ extension Blipit {
             return
         }
         DispatchQueue.main.async {
-            ReportFlow(client: client).begin()
+            ReportFlow(client: client, picker: Nuggets.shared?.options.screenPicker ?? true).begin()
         }
+    }
+
+    public static func setReportHandler(_ handler: ((_ trigger: String, _ crashId: String?) -> Void)?) {
+        DispatchQueue.main.async { ReportTriggers.handler = handler }
+    }
+
+    public static func promptAfterCrash(_ eventId: String) {
+        guard let id = ReportSettings.crashId(eventId) else { return }
+        DispatchQueue.main.async { ReportTriggers.prompt(.crash, crashId: id) }
     }
 
     public static func showReportButton() {
         DispatchQueue.main.async {
-            guard reportButton == nil, let window = ReportFlow.keyWindow() else { return }
-            let button = UIButton(type: .system)
-            button.setTitle(" " + ReportLanguage.text("title"), for: .normal)
-            button.setImage(UIImage(systemName: "exclamationmark.bubble.fill"), for: .normal)
-            button.tintColor = .white
-            button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-            button.backgroundColor = ReportTheme.brand
-            button.layer.cornerRadius = 22
-            button.layer.shadowColor = UIColor.black.cgColor
-            button.layer.shadowOpacity = 0.25
-            button.layer.shadowRadius = 10
-            button.layer.shadowOffset = CGSize(width: 0, height: 4)
-            button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 18)
-            button.accessibilityLabel = ReportLanguage.text("title")
-            button.translatesAutoresizingMaskIntoConstraints = false
-            button.addAction(UIAction { _ in showReport() }, for: .touchUpInside)
-            window.addSubview(button)
-            NSLayoutConstraint.activate([
-                button.heightAnchor.constraint(equalToConstant: 44),
-                button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-                button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-            ])
-            reportButton = button
+            buttonWanted = true
+            placeButton()
         }
+    }
+
+    static func updateButton() {
+        if buttonWanted || ReportTriggers.serverButton { placeButton() } else { removeButton() }
+    }
+
+    static func placeButton() {
+        guard reportButton == nil, let window = ReportFlow.keyWindow() else { return }
+        let button = UIButton(type: .system)
+        button.setTitle(" " + ReportLanguage.text("title"), for: .normal)
+        button.setImage(UIImage(systemName: "exclamationmark.bubble.fill"), for: .normal)
+        button.tintColor = .white
+        button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        button.backgroundColor = ReportTheme.brand
+        button.layer.cornerRadius = 22
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOpacity = 0.25
+        button.layer.shadowRadius = 10
+        button.layer.shadowOffset = CGSize(width: 0, height: 4)
+        button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 18)
+        button.accessibilityLabel = ReportLanguage.text("title")
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addAction(UIAction { _ in showReport() }, for: .touchUpInside)
+        window.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.heightAnchor.constraint(equalToConstant: 44),
+            button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+        ])
+        reportButton = button
+    }
+
+    static func removeButton() {
+        reportButton?.removeFromSuperview()
+        reportButton = nil
     }
 
     public static func hideReportButton() {
         DispatchQueue.main.async {
-            reportButton?.removeFromSuperview()
-            reportButton = nil
+            buttonWanted = false
+            updateButton()
         }
     }
 }
@@ -70,10 +94,14 @@ final class ReportFlow {
     var video: (file: URL, durationMs: Int)?
     var recordingAllowed = false
     var recordingMaxMs = 60_000
+    let crashId: String?
+    let picker: Bool
     static var active: ReportFlow?
 
-    init(client: ReportClient) {
+    init(client: ReportClient, crashId: String? = nil, picker: Bool = false) {
         self.client = client
+        self.crashId = crashId
+        self.picker = picker
     }
 
     func t(_ key: String) -> String { ReportLanguage.text(key, lang) }
@@ -113,7 +141,10 @@ final class ReportFlow {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.image = ReportFlow.snapshot()
                 Blipit.reportButton?.isHidden = false
-                if let image = self.image {
+                let earlier = self.picker ? ReportTriggers.shelf.earlier(than: Screens.current) : []
+                if let image = self.image, !earlier.isEmpty {
+                    self.present(ReportPickerController(flow: self, choices: [image] + earlier))
+                } else if let image = self.image {
                     self.present(ReportEditorController(flow: self, image: image))
                 } else {
                     self.present(ReportDetailsController(flow: self, notice: self.t("noShot")))
@@ -640,7 +671,8 @@ final class ReportDetailsController: UIViewController {
             imageSize: flow.image.map { CGSize(width: $0.size.width * $0.scale, height: $0.size.height * $0.scale) },
             screenshots: data == nil ? 0 : 1,
             recordings: flow.video == nil ? 0 : 1,
-            locale: flow.lang
+            locale: flow.lang,
+            eventId: flow.crashId
         )
         setBusy(true, flow.t("sending"))
         flow.client.send(body) { [weak self] result in

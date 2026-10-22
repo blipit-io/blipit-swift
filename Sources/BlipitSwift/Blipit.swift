@@ -5,9 +5,10 @@ import BlipitNuggets
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
-    public static let version = "0.5.0"
+    public static let version = "0.6.0"
     public static let packageName = "swiftpm:blipit-swift"
     static var reporter: ReportClient?
+    static var reportUser: (id: String?, email: String?) = (nil, nil)
     static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."
     static let missingProjectWarning = "[blipit] Blipit.start got no project id, so Blipit is off and nothing is sent. Pass the id from the project's Keys page at app.blipit.io."
 
@@ -59,6 +60,9 @@ public enum Blipit {
         nuggets.boot()
         Auto.install(nuggets)
         Stuck.setup(release: nuggets.release, environment: options.environment, waitForReady: waitForReady || startupDeadline > 0)
+        #if os(iOS)
+        if #available(iOS 15.0, *) { ReportTriggers.install(options) }
+        #endif
         return true
     }
 
@@ -113,6 +117,34 @@ public enum Blipit {
         if let username { user["username"] = Json.cut(username, 128) }
         nuggets.scope.setUser(user.isEmpty ? nil : user)
         nuggets.scopeChanged()
+        reportUser = (user["id"], user["email"])
+        #if os(iOS)
+        if #available(iOS 15.0, *) { ReportTriggers.userChanged() }
+        #endif
+    }
+
+    #if !(os(iOS) || os(tvOS))
+    static var screenName: String?
+    #endif
+
+    public static func setScreen(_ name: String) {
+        guard let nuggets = Nuggets.shared, let name = StuckEvent.name(name, max: 128) else { return }
+        #if os(iOS) || os(tvOS)
+        let previous = Screens.current
+        Screens.current = name
+        #else
+        let previous = screenName
+        screenName = name
+        #endif
+        if nuggets.options.screenBreadcrumbs, name != previous {
+            var data: [String: Any] = ["to": name]
+            if let previous { data["from"] = previous }
+            nuggets.scope.add("screen \(name)", category: "navigation", data: data)
+            nuggets.scopeChanged()
+        }
+        #if os(iOS)
+        if nuggets.options.screenPicker, #available(iOS 15.0, *) { ReportTriggers.screenAppeared(name) }
+        #endif
     }
 
     public static func setTag(_ key: String, _ value: String) {
@@ -135,6 +167,17 @@ public enum Blipit {
 
     public static func setConsent(_ granted: Bool) {
         Nuggets.shared?.setConsent(granted)
+        #if os(iOS)
+        if !granted, #available(iOS 15.0, *) { DispatchQueue.main.async { ReportTriggers.shelf.clear() } }
+        #endif
+    }
+
+    public static var lastCrashId: String? {
+        guard let nuggets = Nuggets.shared else { return nil }
+        return nuggets.io.sync {
+            defer { nuggets.pendingCrash = nil }
+            return nuggets.pendingCrash
+        }
     }
 
     public static var hasConsent: Bool {
