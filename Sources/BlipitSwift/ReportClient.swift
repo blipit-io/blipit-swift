@@ -116,6 +116,27 @@ public final class ReportClient {
         }
     }
 
+    public func stuckSettings(_ done: @escaping (StuckLimits?) -> Void) {
+        run(URLRequest(url: url("/api/v1/feedback/settings"))) { result in
+            guard case let .success(data) = result, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return done(nil) }
+            done(StuckLimits.from(json["stuck"]))
+        }
+    }
+
+    public func event(_ body: [String: Any], _ done: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: url("/api/v1/events"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        run(request) { result in
+            switch result {
+            case .success: done(true)
+            case let .failure(ReportError.http(status)): done((400..<500).contains(status) && status != 408 && status != 429)
+            case .failure: done(false)
+            }
+        }
+    }
+
     public func send(_ body: [String: Any], _ done: @escaping (Result<ReportReceipt, Error>) -> Void) {
         var request = URLRequest(url: url("/api/v1/feedback"))
         request.httpMethod = "POST"

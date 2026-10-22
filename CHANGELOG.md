@@ -1,3 +1,9 @@
+## 0.4.0
+
+- Stuck screens and flows: `waitForReady` with `Blipit.reportReady()`, and `startFlow`, `flowStep` and `endFlow`. When the app never reaches its first usable screen, or a flow such as sign-in never finishes, Blipit opens a Stuck issue with the last step and the steps before it. Only time on screen counts; the time limits come from Blipit.
+- `startupDeadline` from 0.3.1 is now off by default and only switches the check on (any value above 0); the limit comes from Blipit. Apps that relied on the 0.3.1 default pass `waitForReady: true`.
+- Ships a privacy manifest (`PrivacyInfo.xcprivacy`): crash, performance and other diagnostic data, not linked, no tracking, no required-reason APIs.
+
 ## 0.3.1
 - Stuck on startup: `Blipit.reportReady()` and the `startupDeadline` parameter of `start` (20 seconds by default, 0 turns it off). If the app has been in the foreground that long without `reportReady`, one warning is sent per launch, grouped into one Stuck on startup issue with the screen and breadcrumbs. A late `reportReady` adds a breadcrumb with the time it took and calls `SentrySDK.reportFullyDisplayed()`.
 

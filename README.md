@@ -7,7 +7,7 @@ Blipit error monitoring for iOS, macOS, tvOS and watchOS. Know your app broke be
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.3.1")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.4.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -38,23 +38,6 @@ Blipit.flush()
 
 `capture(error:)` and `capture(message:level:)` still work and do the same thing.
 
-## Stuck on startup
-
-An app that never gets past its splash or loading screen does not crash or throw, so nothing is reported on its own. Call `reportReady` once the first real screen can be used:
-
-```swift
-Blipit.addBreadcrumb("session restored", category: "startup")
-Blipit.reportReady()
-```
-
-From `start`, Blipit counts the time the app is in the foreground (time in the background is not counted). If `reportReady` has not been called after 20 seconds, it sends one warning for that launch: `App did not become ready within 20 s`, with the tags `startup.stalled=true`, `startup.deadline_ms` and `startup.screen` (the top view controller, iOS) and the breadcrumbs added so far. Every such launch is grouped into one Stuck on startup issue. A later `reportReady` adds an `App became ready after N ms` breadcrumb instead of a second event, and also calls Sentry's `reportFullyDisplayed`, so apps with time to full display tracing on get the measurement too. Calling it more than once is fine.
-
-Change the deadline in seconds, or turn the check off with 0:
-
-```swift
-Blipit.start(key: "<public key>", project: "<project id>", startupDeadline: 30)
-```
-
 ## Bug reports
 
 On iOS 15 and later, show the floating Report a bug button, or open the reporter from your own menu:
@@ -65,6 +48,32 @@ Blipit.showReport()
 ```
 
 The reporter asks first: Take a screenshot, Record a video (in-app ReplayKit, only your app is recorded) or Skip. The screenshot opens full screen with the tools above and below it; pinch or double-tap to zoom, mark the problem, then add a title and what happened and send. Reports arrive under Bug reports at app.blipit.io.
+
+## Stuck screens and flows
+
+Some failures never crash: the launch screen keeps spinning, or Sign in with Apple never calls back. Tell Blipit when the app is ready and wrap the flows that must finish:
+
+```swift
+Blipit.start(key: "<public key>", project: "<project id>", waitForReady: true)
+
+Blipit.reportReady()
+
+Blipit.startFlow("sign-in")
+Blipit.flowStep("sign-in", "apple-sheet")
+Blipit.endFlow("sign-in")
+```
+
+With `waitForReady: true`, call `Blipit.reportReady()` once the first usable screen shows.
+
+If one does not finish in time, Blipit opens a **Stuck** issue with the flow, the last step, the screen when it is known, how long it waited and the steps before it. Only time on screen counts: while the app is in the background the clock stops, so a sign-in that sends people to a browser is not cut short. Blipit sets the time limits on its side and the SDK picks them up with its settings, so they can change without an app release. Nothing is decided before those settings arrive.
+
+Call `startFlow` when the person starts the action (taps Continue with Google), not when the screen opens. `endFlow` covers every way out, including the person cancelling. Flow and step names are sent as you write them: use fixed names such as `sign-in` or `google-picker`, never emails, phone numbers or other personal data.
+
+## Store declarations
+
+What to declare when you ship an app with Blipit:
+
+- **Apple App Store**: the package ships a privacy manifest (`PrivacyInfo.xcprivacy`) that declares crash data, performance data and other diagnostic data, not linked to the person and not used for tracking. In App Store Connect, App Privacy, declare the same three types under App Functionality, not linked, no tracking. Blipit uses no required-reason APIs of its own, no IDFA, no App Tracking Transparency prompt and no background modes. If you call `setUser` with an id or email, declare those as linked to the person.
 
 ## Performance
 
