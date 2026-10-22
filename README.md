@@ -7,7 +7,7 @@ Blipit error monitoring for iOS, macOS, tvOS and watchOS. Know your app broke be
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.3.0")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.3.1")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -37,6 +37,23 @@ Blipit.flush()
 ```
 
 `capture(error:)` and `capture(message:level:)` still work and do the same thing.
+
+## Stuck on startup
+
+An app that never gets past its splash or loading screen does not crash or throw, so nothing is reported on its own. Call `reportReady` once the first real screen can be used:
+
+```swift
+Blipit.addBreadcrumb("session restored", category: "startup")
+Blipit.reportReady()
+```
+
+From `start`, Blipit counts the time the app is in the foreground (time in the background is not counted). If `reportReady` has not been called after 20 seconds, it sends one warning for that launch: `App did not become ready within 20 s`, with the tags `startup.stalled=true`, `startup.deadline_ms` and `startup.screen` (the top view controller, iOS) and the breadcrumbs added so far. Every such launch is grouped into one Stuck on startup issue. A later `reportReady` adds an `App became ready after N ms` breadcrumb instead of a second event, and also calls Sentry's `reportFullyDisplayed`, so apps with time to full display tracing on get the measurement too. Calling it more than once is fine.
+
+Change the deadline in seconds, or turn the check off with 0:
+
+```swift
+Blipit.start(key: "<public key>", project: "<project id>", startupDeadline: 30)
+```
 
 ## Bug reports
 

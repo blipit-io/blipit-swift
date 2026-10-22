@@ -3,7 +3,7 @@ import Sentry
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
-    public static let version = "0.3.0"
+    public static let version = "0.3.1"
     public static let packageName = "swiftpm:blipit-swift"
     static var reporter: ReportClient?
     static let missingKeyWarning = "[blipit] Blipit.start got no key, so Blipit is off and nothing is sent. Pass the project's public key from app.blipit.io, Keys."
@@ -64,6 +64,7 @@ public enum Blipit {
         release: String? = nil,
         tracesSampleRate: Double = 0,
         endpoint: String = defaultEndpoint,
+        startupDeadline: TimeInterval = 20,
         configure extra: ((Options) -> Void)? = nil
     ) -> Bool {
         let probe = Options()
@@ -77,7 +78,12 @@ public enum Blipit {
                 return custom.map { $0(event) } ?? event
             }
         }
+        Startup.start(deadline: startupDeadline)
         return true
+    }
+
+    public static func reportReady() {
+        Startup.ready()
     }
 
     @discardableResult
