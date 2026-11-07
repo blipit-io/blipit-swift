@@ -9,7 +9,7 @@ Since 0.5.0 the package runs on blipit-nuggets, Blipit's own crash and error cor
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.5.1")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.7.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -33,7 +33,24 @@ Both values are on the project's Keys page at app.blipit.io. If the key or proje
 - App hangs: the main thread blocked for 2 seconds or more, with the main thread's stack at that moment.
 - Watchdog and out-of-memory terminations (iOS, tvOS): if the last run ended while the app was in the foreground, without a crash file and without a clean exit, on the same app build, OS version and boot, the next launch reports it as `WatchdogTermination`. A low-memory warning before the end, or a hang in progress, is named in the report. Runs under the debugger are never counted.
 - Sessions for release health: one per foreground period (a new one after 30 seconds in the background), marked errored, crashed or abnormal.
+- Failed requests: every `URLSession` request that ends with a network error (timeout, no connection, host not found, TLS failure; a cancel does not count) or an HTTP 5xx is sent as an error `HTTPRequestFailed`, for example `GET api.example.com/orders/123 failed: 503` or `POST api.example.com/cart failed: timedOut`. It carries the method, the URL without query string, the status, the error code, the duration and the breadcrumbs; never headers or bodies. 4xx answers (401, 403, 404) are left out. One event per method, host and path per minute, repeats counted into the next one (`extra.http.repeated`); Blipit groups all failures of one endpoint into one issue, with ids and UUIDs in the path folded together. No code needed: it works for `URLSession.shared`, your own sessions and libraries built on `URLSession` such as Alamofire. Blipit can switch it off or change the pace from its settings; `options.httpFailures = false` turns it off in the app.
 - Breadcrumbs: app lifecycle, screens (UIKit view controllers from your app's bundle) and `URLSession` requests (method, URL without query string, status, duration; never headers or bodies).
+
+## Failed starts
+
+When the app shows its own error screen instead of the first usable screen, say so:
+
+```swift
+Blipit.reportReady(failed: "sessionUnreadable")
+```
+
+and for a caught error, with the step it failed in:
+
+```swift
+do { try loadSession() } catch { Blipit.captureStartup(error, step: "auth") }
+```
+
+Both send one warning `StartupFailed`, grouped by reason, with every breadcrumb of the launch (`addBreadcrumb(step, category: "startup")` is a good way to leave them). `captureStartup` records the error's domain and code, the `OSStatus` and its message for keychain errors, and the underlying errors. Calls made before `start` are kept and sent once it runs, events wait on disk until delivered, and the last launch's breadcrumbs ride on the next launch's first event as `extra.previous_launch`. Every event carries the tag `signing` (`development`, `adhoc`, `appstore`); without an `environment`, a build signed with `get-task-allow` reports as `testing`.
 
 ## Manual capture
 
@@ -65,7 +82,7 @@ Blipit.start(key: "<public key>", project: "<project id>") { options in
 }
 ```
 
-`enabled`, `environment`, `release`, `sampleRate` (errors only, never crashes), `tracesSampleRate`, `maxBreadcrumbs` (up to 100), `debug`, `crashes`, `machExceptions`, `hangs`, `hangThreshold`, `watchdogTerminations`, `sessions`, `networkBreadcrumbs`, `screenBreadcrumbs`, `lifecycleBreadcrumbs`, `shakeToReport`, `screenshotToReport`, `twoFingerReport`, `reportAfterCrash`, `screenPicker` (see Bug reports), `beforeSend` (gets and returns the event as Blipit JSON; return `nil` to drop it) and `directory` (where queued events wait).
+`enabled`, `environment`, `release`, `sampleRate` (errors only, never crashes), `tracesSampleRate`, `maxBreadcrumbs` (up to 100), `debug`, `crashes`, `machExceptions`, `hangs`, `hangThreshold`, `watchdogTerminations`, `sessions`, `httpFailures` (failed requests), `networkBreadcrumbs`, `screenBreadcrumbs`, `lifecycleBreadcrumbs`, `shakeToReport`, `screenshotToReport`, `twoFingerReport`, `reportAfterCrash`, `screenPicker` (see Bug reports), `beforeSend` (gets and returns the event as Blipit JSON; return `nil` to drop it) and `directory` (where queued events wait).
 
 ## Offline, rate limits and consent
 

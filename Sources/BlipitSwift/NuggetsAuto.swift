@@ -164,6 +164,7 @@ enum Network {
             nuggets.scope.add("\(method) \(clean(url))" + (status.map { " \($0)" } ?? ""), category: "http", level: level, data: data)
             nuggets.scopeChanged()
         }
+        HTTPFailures.report(nuggets, method: method, url: url, status: status, error: task.error as NSError?, durationMs: Int(ended.timeIntervalSince(watch.started) * 1000))
         if let tracer = Auto.tracer, tracer.sampled() {
             var attributes: [String: Any] = ["http.request.method": method, "url.full": clean(url)]
             if let host = url.host { attributes["server.address"] = host }
@@ -182,7 +183,7 @@ enum Auto {
 
     static func install(_ nuggets: Nuggets) {
         if nuggets.options.tracesSampleRate > 0 { tracer = Tracer(nuggets, rate: min(1, nuggets.options.tracesSampleRate)) }
-        if nuggets.options.networkBreadcrumbs || tracer != nil { Network.install(host: nuggets.transport.host) }
+        if nuggets.options.networkBreadcrumbs || nuggets.options.httpFailures || tracer != nil { Network.install(host: nuggets.transport.host) }
         if nuggets.options.hangs {
             let watch = HangWatch(nuggets, threshold: nuggets.options.hangThreshold)
             hang = watch

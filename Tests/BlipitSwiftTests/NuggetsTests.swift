@@ -73,6 +73,7 @@ final class NuggetsTests: XCTestCase {
         dirs = []
         Nuggets.shared = nil
         Sessions.shared = nil
+        Startup.reset()
     }
 
     func folder() -> URL {
@@ -533,6 +534,204 @@ final class NuggetsTests: XCTestCase {
         XCTAssertFalse("\(found)".contains("secret"))
     }
 
+    func appRequest(_ session: URLSession, _ url: String, method: String = "GET") {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = method
+        let done = expectation(description: "request \(url)")
+        session.dataTask(with: request) { _, _, _ in done.fulfill() }.resume()
+        wait(for: [done], timeout: 5)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    }
+
+    func testFailedRequestsBecomeOneRateLimitedErrorEventEach() throws {
+        ScriptedProtocol.reset([.status(503, [:], "{}"), .status(503, [:], "{}"), .status(401, [:], "{}"), .status(200, [:], "{}"), .offline])
+        HTTPFailures.enabled = true
+        HTTPFailures.intervalMs = 60_000
+        let nuggets = make()
+        Nuggets.shared = nuggets
+        Network.install(host: "in.example")
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedProtocol.self]
+        let session = URLSession(configuration: config)
+        nuggets.io.sync { nuggets.transport.blockedUntil = Date().addingTimeInterval(600) }
+        appRequest(session, "https://api.example.com/orders/123?token=secret", method: "POST")
+        appRequest(session, "https://api.example.com/orders/123", method: "POST")
+        appRequest(session, "https://api.example.com/me")
+        appRequest(session, "https://api.example.com/cart")
+        appRequest(session, "https://api.example.com/home")
+        let events = queued(nuggets).compactMap { $0["body"] as? [String: Any] }.filter { ($0["exception"] as? [String: Any])?["type"] as? String == "HTTPRequestFailed" }
+        XCTAssertEqual(events.count, 2, "one 503 within the minute and one offline failure; 401 and 200 are not failures")
+        let first = try XCTUnwrap(events.first { (($0["request"] as? [String: Any])?["method"] as? String) == "POST" })
+        assertMatchesSchema(first)
+        let exception = try XCTUnwrap(first["exception"] as? [String: Any])
+        XCTAssertEqual(exception["value"] as? String, "POST api.example.com/orders/123 failed: 503")
+        XCTAssertEqual(exception["handled"] as? Bool, true)
+        XCTAssertEqual(first["level"] as? String, "error")
+        XCTAssertEqual((first["request"] as? [String: Any])?["url"] as? String, "https://api.example.com/orders/123")
+        let http = try XCTUnwrap((first["extra"] as? [String: Any])?["http"] as? [String: Any])
+        XCTAssertEqual(http["status_code"] as? Int, 503)
+        XCTAssertNotNil(http["duration_ms"] as? Int)
+        XCTAssertTrue((first["breadcrumbs"] as? [[String: Any]] ?? []).contains { $0["category"] as? String == "http" })
+        XCTAssertFalse("\(first)".contains("secret"))
+        let offline = try XCTUnwrap(events.first { (($0["request"] as? [String: Any])?["url"] as? String)?.hasSuffix("/home") == true })
+        XCTAssertEqual((offline["exception"] as? [String: Any])?["value"] as? String, "GET api.example.com/home failed: notConnectedToInternet")
+        XCTAssertEqual(((offline["extra"] as? [String: Any])?["http"] as? [String: Any])?["error_code"] as? Int, NSURLErrorNotConnectedToInternet)
+    }
+
+    func testFailureGateFoldsRepeatsIntoTheNextEvent() {
+        let gate = FailureGate()
+        XCTAssertEqual(gate.pass("GET a/b", now: 0, intervalMs: 60_000), 0)
+        XCTAssertNil(gate.pass("GET a/b", now: 1_000, intervalMs: 60_000))
+        XCTAssertNil(gate.pass("GET a/b", now: 2_000, intervalMs: 60_000))
+        XCTAssertEqual(gate.pass("GET a/c", now: 2_000, intervalMs: 60_000), 0)
+        XCTAssertEqual(gate.pass("GET a/b", now: 61_000, intervalMs: 60_000), 2)
+        XCTAssertNil(gate.pass("GET a/b", now: 62_000, intervalMs: 60_000))
+    }
+
+    func testOnlyTransportErrorsAndServerErrorsCount() {
+        XCTAssertTrue(HTTPFailures.failed(status: 500, error: nil))
+        XCTAssertTrue(HTTPFailures.failed(status: 503, error: nil))
+        XCTAssertFalse(HTTPFailures.failed(status: 404, error: nil))
+        XCTAssertFalse(HTTPFailures.failed(status: 401, error: nil))
+        XCTAssertFalse(HTTPFailures.failed(status: 200, error: nil))
+        XCTAssertFalse(HTTPFailures.failed(status: nil, error: URLError(.cancelled) as NSError))
+        XCTAssertTrue(HTTPFailures.failed(status: nil, error: URLError(.timedOut) as NSError))
+        XCTAssertEqual(HTTPFailures.name(URLError(.timedOut) as NSError), "timedOut")
+        XCTAssertEqual(HTTPFailures.name(URLError(URLError.Code(rawValue: -12345)) as NSError), "URLError -12345")
+    }
+
+    func testServerSettingsSwitchFailedRequestCapture() {
+        defer { HTTPFailures.enabled = true; HTTPFailures.intervalMs = 60_000 }
+        HTTPFailures.configure(["enabled": false, "interval_ms": 5_000])
+        XCTAssertFalse(HTTPFailures.enabled)
+        XCTAssertEqual(HTTPFailures.intervalMs, 5_000)
+        HTTPFailures.configure(nil)
+        XCTAssertFalse(HTTPFailures.enabled)
+        let nuggets = make()
+        nuggets.io.sync { nuggets.transport.blockedUntil = Date().addingTimeInterval(600) }
+        HTTPFailures.report(nuggets, method: "GET", url: URL(string: "https://api.example.com/x")!, status: 500, error: nil, durationMs: 3)
+        XCTAssertTrue(queued(nuggets).isEmpty)
+    }
+
+    func held(_ nuggets: Nuggets) -> Nuggets {
+        nuggets.io.sync { nuggets.transport.blockedUntil = Date().addingTimeInterval(600) }
+        return nuggets
+    }
+
+    func events(_ nuggets: Nuggets, type: String? = nil) -> [[String: Any]] {
+        queued(nuggets).compactMap { $0["body"] as? [String: Any] }.filter { type == nil || ($0["exception"] as? [String: Any])?["type"] as? String == type }
+    }
+
+    enum AuthError: Error { case sessionUnreadable }
+
+    func testReportReadyFailedSendsOneStartupEventWithItsBreadcrumbs() throws {
+        let nuggets = held(make())
+        Nuggets.shared = nuggets
+        Blipit.addBreadcrumb("auth loaded", category: "startup")
+        Blipit.addBreadcrumb("me request start", category: "startup")
+        Blipit.reportReady(failed: "sessionUnreadable")
+        Blipit.reportReady()
+        let sent = events(nuggets, type: "StartupFailed")
+        XCTAssertEqual(sent.count, 1)
+        let event = try XCTUnwrap(sent.first)
+        assertMatchesSchema(event)
+        XCTAssertEqual(event["level"] as? String, "warning")
+        XCTAssertEqual((event["exception"] as? [String: Any])?["value"] as? String, "sessionUnreadable")
+        XCTAssertEqual((event["tags"] as? [String: String])?["startup.outcome"], "failed")
+        XCTAssertEqual(((event["extra"] as? [String: Any])?["startup"] as? [String: Any])?["reason"] as? String, "sessionUnreadable")
+        XCTAssertEqual((event["breadcrumbs"] as? [[String: Any]])?.compactMap { $0["message"] as? String }, ["auth loaded", "me request start"])
+    }
+
+    func testCaptureStartupRecordsTheErrorTypeAndCode() throws {
+        let nuggets = held(make())
+        Nuggets.shared = nuggets
+        let keychain = NSError(domain: NSOSStatusErrorDomain, code: -25300, userInfo: [NSUnderlyingErrorKey: NSError(domain: NSOSStatusErrorDomain, code: -25308)])
+        Blipit.captureStartup(keychain, step: "auth")
+        Blipit.captureStartup(AuthError.sessionUnreadable, step: "auth")
+        let sent = events(nuggets, type: "StartupFailed")
+        XCTAssertEqual(sent.compactMap { ($0["exception"] as? [String: Any])?["value"] as? String }, ["auth: NSOSStatusErrorDomain -25300", "auth: AuthError.sessionUnreadable"])
+        let first = try XCTUnwrap((sent.first?["extra"] as? [String: Any])?["startup"] as? [String: Any])
+        XCTAssertEqual(first["os_status"] as? Int, -25300)
+        XCTAssertEqual(first["step"] as? String, "auth")
+        XCTAssertEqual(first["error_code"] as? Int, -25300)
+        XCTAssertNotNil(first["os_status_message"] as? String)
+        XCTAssertEqual(((first["causes"] as? [[String: Any]])?.first)?["code"] as? Int, -25308)
+        XCTAssertEqual((sent.first?["tags"] as? [String: String])?["startup.step"], "auth")
+        XCTAssertNil((sent.first?["exception"] as? [String: Any])?["stacktrace"])
+        sent.forEach { assertMatchesSchema($0) }
+    }
+
+    func testCallsBeforeStartAreKeptAndSentOnceStarted() throws {
+        Nuggets.shared = nil
+        Blipit.addBreadcrumb("start", category: "startup")
+        Blipit.reportReady(failed: "offline before start")
+        let nuggets = held(make())
+        Nuggets.shared = nuggets
+        Startup.started(nuggets)
+        let event = try XCTUnwrap(events(nuggets, type: "StartupFailed").first)
+        XCTAssertEqual((event["exception"] as? [String: Any])?["value"] as? String, "offline before start")
+        XCTAssertEqual((event["breadcrumbs"] as? [[String: Any]])?.first?["message"] as? String, "start")
+    }
+
+    func testThePreviousLaunchsBreadcrumbsRideOnTheFirstEvent() throws {
+        let dir = folder()
+        let old = make(dir)
+        old.scope.add("auth loaded", category: "startup")
+        old.scope.add("failed", category: "startup")
+        var saved = old.scope.snapshot()
+        saved["release"] = "app@1.2.2"
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        Json.write(saved, old.scopeFile)
+        Json.write(["clean": true], old.runFile)
+        let nuggets = held(make(dir))
+        Nuggets.shared = nuggets
+        nuggets.recover()
+        nuggets.capture(message: "first", level: .error)
+        nuggets.capture(message: "second", level: .error)
+        let sent = events(nuggets).filter { $0["message"] != nil }
+        let launch = try XCTUnwrap((sent.first { $0["message"] as? String == "first" }?["extra"] as? [String: Any])?["previous_launch"] as? [String: Any])
+        XCTAssertEqual(launch["label"] as? String, "previous launch")
+        XCTAssertEqual(launch["release"] as? String, "app@1.2.2")
+        XCTAssertEqual((launch["breadcrumbs"] as? [[String: Any]])?.compactMap { $0["message"] as? String }, ["auth loaded", "failed"])
+        XCTAssertNil((sent.first { $0["message"] as? String == "second" }?["extra"] as? [String: Any])?["previous_launch"])
+    }
+
+    func testStuckOnStartupFiresWithoutAHangWhenReadyNeverComes() throws {
+        let nuggets = held(make())
+        Nuggets.shared = nuggets
+        Stuck.queue.sync {
+            Stuck.limits = StuckLimits(startupMs: 300, flowMs: 60_000)
+            Stuck.provisional = false
+        }
+        Stuck.setForeground(true)
+        Blipit.addBreadcrumb("auth loaded", category: "startup")
+        Stuck.start(FlowWatch.startup)
+        let deadline = Date().addingTimeInterval(4)
+        var stuck: [String: Any]?
+        while stuck == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            stuck = events(nuggets).first { ($0["stuck"] as? [String: Any])?["kind"] as? String == "startup" }
+        }
+        let event = try XCTUnwrap(stuck, "the main thread stayed free and reportReady never came")
+        XCTAssertTrue((event["breadcrumbs"] as? [[String: Any]] ?? []).contains { $0["message"] as? String == "auth loaded" })
+        Stuck.queue.sync {
+            Stuck.limits = nil
+            Stuck.provisional = true
+        }
+        Stuck.queue.sync { Stuck.received(nil) }
+        XCTAssertEqual(Stuck.queue.sync { Stuck.limits }, Stuck.fallback, "offline on the first launch still gets limits")
+        Stuck.queue.sync { Stuck.limits = nil }
+    }
+
+    func testSigningDecidesTestingOnlyWithoutAnExplicitEnvironment() {
+        XCTAssertEqual(Signing.kind(profile: "<plist><key>get-task-allow</key>\n\t<true/></plist>"), "development")
+        XCTAssertEqual(Signing.kind(profile: "<plist><key>get-task-allow</key><false/><key>ProvisionedDevices</key></plist>"), "adhoc")
+        XCTAssertEqual(Signing.kind(profile: nil), "appstore")
+        XCTAssertEqual(Signing.environment(explicit: nil, signing: "development"), "testing")
+        XCTAssertEqual(Signing.environment(explicit: "production", signing: "development"), "production")
+        XCTAssertNil(Signing.environment(explicit: nil, signing: "appstore"))
+    }
+
     func testTracesGoOutAsOtlpJson() throws {
         ScriptedProtocol.reset()
         let nuggets = make(change: { $0.tracesSampleRate = 1 })
@@ -561,7 +760,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.path, "/api/v1/events")
         XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
         XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
-        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.6.0")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.7.0")
     }
 
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {

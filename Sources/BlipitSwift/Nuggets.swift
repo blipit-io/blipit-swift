@@ -35,6 +35,7 @@ public final class Options {
     public var watchdogTerminations = true
     public var sessions = true
     public var networkBreadcrumbs = true
+    public var httpFailures = true
     public var screenBreadcrumbs = true
     public var lifecycleBreadcrumbs = true
     public var shakeToReport = false
@@ -538,6 +539,7 @@ final class Nuggets {
         let level = event["level"] as? String
         if level != "fatal", options.sampleRate < 1, sampler() >= options.sampleRate { return .empty }
         var event = event
+        Startup.attachPrevious(&event)
         if let hook = options.beforeSend {
             guard let changed = hook(event) else { return .empty }
             event = changed

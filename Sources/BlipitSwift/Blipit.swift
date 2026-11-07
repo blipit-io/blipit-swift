@@ -5,7 +5,7 @@ import BlipitNuggets
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
-    public static let version = "0.6.0"
+    public static let version = "0.7.0"
     public static let packageName = "swiftpm:blipit-swift"
     static var reporter: ReportClient?
     static var reportUser: (id: String?, email: String?) = (nil, nil)
@@ -52,22 +52,42 @@ public enum Blipit {
         configure extra: ((Options) -> Void)? = nil
     ) -> Bool {
         let options = Options()
-        guard configure(options, key: key, project: project, environment: environment, release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint) else { return false }
+        let signing = Signing.current
+        guard configure(options, key: key, project: project, environment: Signing.environment(explicit: environment, signing: signing), release: release, tracesSampleRate: tracesSampleRate, endpoint: endpoint) else { return false }
         extra?(options)
         guard options.enabled, Nuggets.shared == nil else { return options.enabled }
         let nuggets = Nuggets(options: options)
         Nuggets.shared = nuggets
+        if let signing { nuggets.scope.setTag("signing", signing) }
         nuggets.boot()
         Auto.install(nuggets)
         Stuck.setup(release: nuggets.release, environment: options.environment, waitForReady: waitForReady || startupDeadline > 0)
+        Startup.started(nuggets)
         #if os(iOS)
         if #available(iOS 15.0, *) { ReportTriggers.install(options) }
         #endif
         return true
     }
 
-    public static func reportReady() {
+    @discardableResult
+    public static func reportReady(failed reason: String? = nil) -> EventId {
         Stuck.end(FlowWatch.startup)
+        guard let reason = reason.flatMap({ StuckEvent.name($0, max: 256) }) else { return .empty }
+        guard let nuggets = Nuggets.shared else {
+            Startup.whenStarted { _ = Startup.failed($0, reason: reason) }
+            return .empty
+        }
+        return Startup.failed(nuggets, reason: reason)
+    }
+
+    @discardableResult
+    public static func captureStartup(_ error: Error, step: String) -> EventId {
+        let step = StuckEvent.name(step, max: 128) ?? "startup"
+        guard let nuggets = Nuggets.shared else {
+            Startup.whenStarted { _ = Startup.capture($0, error: error, step: step) }
+            return .empty
+        }
+        return Startup.capture(nuggets, error: error, step: step)
     }
 
     public static func startFlow(_ name: String) {
@@ -93,7 +113,11 @@ public enum Blipit {
 
     @discardableResult
     public static func capture(message: String, level: Level = .info) -> EventId {
-        Nuggets.shared?.capture(message: message, level: level) ?? .empty
+        guard let nuggets = Nuggets.shared else {
+            Startup.whenStarted { $0.capture(message: message, level: level) }
+            return .empty
+        }
+        return nuggets.capture(message: message, level: level)
     }
 
     @inline(never)
@@ -148,9 +172,10 @@ public enum Blipit {
     }
 
     public static func setTag(_ key: String, _ value: String) {
-        guard let nuggets = Nuggets.shared else { return }
-        nuggets.scope.setTag(key, value)
-        nuggets.scopeChanged()
+        Startup.whenStarted { nuggets in
+            nuggets.scope.setTag(key, value)
+            nuggets.scopeChanged()
+        }
     }
 
     public static func setContext(_ key: String, _ value: [String: Any]?) {
@@ -160,9 +185,11 @@ public enum Blipit {
     }
 
     public static func addBreadcrumb(_ message: String, category: String = "custom", level: Level = .info, data: [String: Any]? = nil) {
-        guard let nuggets = Nuggets.shared else { return }
-        nuggets.scope.add(message, category: category, level: level, data: data)
-        nuggets.scopeChanged()
+        let at = Date()
+        Startup.whenStarted { nuggets in
+            nuggets.scope.add(message, category: category, level: level, data: data, at: at)
+            nuggets.scopeChanged()
+        }
     }
 
     public static func setConsent(_ granted: Bool) {

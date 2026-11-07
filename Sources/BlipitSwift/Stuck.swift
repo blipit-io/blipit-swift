@@ -176,6 +176,31 @@ enum Stuck {
     static var fetching = false
     static var lastFetch = 0.0
     static var ready = false
+    static var provisional = true
+    static let fallback = StuckLimits(startupMs: 20_000, flowMs: 60_000)
+
+    static var cacheFile: URL? { Nuggets.shared?.dir.appendingPathComponent("stuck-limits.json") }
+
+    static func cached() -> StuckLimits? {
+        guard let file = cacheFile, let json = Json.read(file) else { return nil }
+        return StuckLimits.from(json)
+    }
+
+    static func received(_ fresh: StuckLimits?) {
+        if let fresh {
+            limits = fresh
+            provisional = false
+            if let file = cacheFile { Json.write(["startup_ms": fresh.startupMs, "flow_ms": fresh.flowMs], file) }
+        } else if limits == nil {
+            limits = cached() ?? fallback
+        }
+    }
+
+    static func trailWithScope() -> [[String: Any]] {
+        let crumbs = (Nuggets.shared?.scope.snapshot()["breadcrumbs"] as? [[String: Any]]) ?? []
+        let merged = (trail.snapshot + crumbs).sorted { ($0["timestamp"] as? String ?? "") < ($1["timestamp"] as? String ?? "") }
+        return Array(merged.suffix(100))
+    }
 
     static func now() -> Double { Date().timeIntervalSince1970 * 1000 }
 
@@ -241,19 +266,19 @@ enum Stuck {
         client.stuckSettings { fresh in
             queue.async {
                 fetching = false
-                if let fresh { limits = fresh }
+                received(fresh)
             }
         }
     }
 
     static func tick() {
-        if limits == nil && now() - lastFetch > 60_000 { fetch() }
+        if provisional && now() - lastFetch > 60_000 { fetch() }
         for flow in watch.due(now: now(), limits: limits) {
             let kind = flow.name == FlowWatch.startup ? "startup" : "flow"
             var stuck: [String: Any] = ["kind": kind, "waited_ms": Int(flow.waitedMs)]
             if kind == "flow" { stuck["flow"] = flow.name }
             if let step = flow.step { stuck["step"] = step }
-            let body = StuckEvent.build(stuck: stuck, trail: trail.snapshot, release: release, environment: environment, os: osVersion(), model: model())
+            let body = StuckEvent.build(stuck: stuck, trail: trailWithScope(), release: release, environment: environment, os: osVersion(), model: model())
             if pending.count < 10 { pending.append(body) }
         }
         flush()
@@ -268,7 +293,8 @@ enum Stuck {
         let batch = pending
         pending = []
         guard nuggets.active else { return }
-        for body in batch {
+        for var body in batch {
+            Startup.attachPrevious(&body)
             if let event = nuggets.applyHooks(body) { nuggets.transport.enqueue("/api/v1/events", event) }
         }
     }

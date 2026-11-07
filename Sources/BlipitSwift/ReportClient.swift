@@ -135,6 +135,7 @@ public final class ReportClient {
     public func stuckSettings(_ done: @escaping (StuckLimits?) -> Void) {
         run(URLRequest(url: url("/api/v1/feedback/settings"))) { result in
             guard case let .success(data) = result, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return done(nil) }
+            HTTPFailures.configure(json["http_failures"])
             done(StuckLimits.from(json["stuck"]))
         }
     }

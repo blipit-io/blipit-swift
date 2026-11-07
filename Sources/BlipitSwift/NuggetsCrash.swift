@@ -312,8 +312,9 @@ extension Nuggets {
                 }
                 if let event = applyHooks(event) { transport.enqueue("/api/v1/events", event) }
                 Sessions.close(previous, as: "abnormal", nuggets: self)
-            } else if previous?["clean"] as? Bool != true {
-                Sessions.close(previous, as: "exited", nuggets: self)
+            } else {
+                Startup.remember(previousScope: saved, release: previous?["release"] as? String)
+                if previous?["clean"] as? Bool != true { Sessions.close(previous, as: "exited", nuggets: self) }
             }
         }
     }
