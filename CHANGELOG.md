@@ -1,3 +1,7 @@
+## 0.7.1
+- One `StartupFailed` per launch: after the first `captureStartup` or `reportReady(failed:)` of a launch, later calls in the same launch send nothing, so one failed start is one issue instead of one per reason. Call `captureStartup` with the most specific error first (for example the keychain read), before any general reason.
+- `since_start_ms` counts from the moment the process started, not from the first startup call, so the first report of a launch no longer shows 0.
+
 ## 0.7.0
 - Failed starts: `Blipit.reportReady(failed: "sessionUnreadable")` on your error screen sends one warning `StartupFailed` with that reason and every breadcrumb of the launch, and ends the startup wait; Blipit groups it by reason. `Blipit.captureStartup(error, step: "auth")` sends the same event for a caught error with its type and code: for an `NSError` the domain and code, for a Security framework error the `OSStatus` and its message (`os_status`, `os_status_message`), the underlying errors, and for a Swift error its type and case (`auth: AuthError.sessionUnreadable`). `reportReady()` without a reason works as before.
 - Stuck on startup no longer depends on reaching Blipit first: when the settings cannot be fetched, the last limits Blipit sent (kept on disk) or 20 s and 60 s are used, and the check is retried every minute. The timer runs on its own queue, so it fires when `reportReady` never comes even if the main thread is free. Stuck reports now carry the app's own breadcrumbs as well as the flow steps.

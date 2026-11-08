@@ -5,8 +5,20 @@ import Security
 
 enum Startup {
     static let type = "StartupFailed"
-    static let began = Date()
+    static let began: Date = {
+        #if canImport(Darwin)
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        if sysctl(&mib, 4, &info, &size, nil, 0) == 0 {
+            let start = info.kp_proc.p_un.__p_starttime
+            if start.tv_sec > 0 { return Date(timeIntervalSince1970: Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000) }
+        }
+        #endif
+        return Date()
+    }()
     private static let lock = NSLock()
+    private static var reported = false
     private static var early: [(Nuggets) -> Void] = []
     private static var previous: [String: Any]?
 
@@ -51,7 +63,16 @@ enum Startup {
         lock.lock()
         early = []
         previous = nil
+        reported = false
         lock.unlock()
+    }
+
+    static func first() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if reported { return false }
+        reported = true
+        return true
     }
 
     static func event(_ nuggets: Nuggets, value: String, details: [String: Any], step: String?) -> [String: Any] {
@@ -74,7 +95,8 @@ enum Startup {
     }
 
     static func failed(_ nuggets: Nuggets, reason: String) -> EventId {
-        nuggets.send(event(nuggets, value: reason, details: ["reason": reason], step: nil))
+        guard first() else { return .empty }
+        return nuggets.send(event(nuggets, value: reason, details: ["reason": reason], step: nil))
     }
 
     static func details(_ error: Error) -> (summary: String, details: [String: Any]) {
@@ -114,6 +136,7 @@ enum Startup {
     }
 
     static func capture(_ nuggets: Nuggets, error: Error, step: String) -> EventId {
+        guard first() else { return .empty }
         let (summary, details) = details(error)
         return nuggets.send(event(nuggets, value: "\(step): \(summary)", details: details, step: step))
     }

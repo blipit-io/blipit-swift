@@ -649,7 +649,7 @@ final class NuggetsTests: XCTestCase {
         Blipit.captureStartup(keychain, step: "auth")
         Blipit.captureStartup(AuthError.sessionUnreadable, step: "auth")
         let sent = events(nuggets, type: "StartupFailed")
-        XCTAssertEqual(sent.compactMap { ($0["exception"] as? [String: Any])?["value"] as? String }, ["auth: NSOSStatusErrorDomain -25300", "auth: AuthError.sessionUnreadable"])
+        XCTAssertEqual(sent.compactMap { ($0["exception"] as? [String: Any])?["value"] as? String }, ["auth: NSOSStatusErrorDomain -25300"])
         let first = try XCTUnwrap((sent.first?["extra"] as? [String: Any])?["startup"] as? [String: Any])
         XCTAssertEqual(first["os_status"] as? Int, -25300)
         XCTAssertEqual(first["step"] as? String, "auth")
@@ -659,6 +659,17 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual((sent.first?["tags"] as? [String: String])?["startup.step"], "auth")
         XCTAssertNil((sent.first?["exception"] as? [String: Any])?["stacktrace"])
         sent.forEach { assertMatchesSchema($0) }
+    }
+
+    func testOneStartupFailurePerLaunchWithTheTimeSinceTheProcessStarted() throws {
+        let nuggets = held(make())
+        Nuggets.shared = nuggets
+        Blipit.captureStartup(AuthError.sessionUnreadable, step: "auth")
+        Blipit.reportReady(failed: "sessionUnreadable")
+        let sent = events(nuggets, type: "StartupFailed")
+        XCTAssertEqual(sent.compactMap { ($0["exception"] as? [String: Any])?["value"] as? String }, ["auth: AuthError.sessionUnreadable"])
+        let startup = try XCTUnwrap((sent.first?["extra"] as? [String: Any])?["startup"] as? [String: Any])
+        XCTAssertGreaterThan(try XCTUnwrap(startup["since_start_ms"] as? Int), 0)
     }
 
     func testCallsBeforeStartAreKeptAndSentOnceStarted() throws {
@@ -760,7 +771,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.path, "/api/v1/events")
         XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
         XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
-        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.7.0")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.7.1")
     }
 
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {
