@@ -406,6 +406,7 @@ final class Transport {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(key, forHTTPHeaderField: "X-Blipit-Key")
+        request.setValue(Blipit.sdkHeader, forHTTPHeaderField: "X-Blipit-Sdk")
         request.httpBody = data
         session.dataTask(with: request) { data, response, error in
             if error != nil { return done(.retry) }

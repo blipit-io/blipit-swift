@@ -185,6 +185,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.map(\.path), ["/api/v1/events", "/api/v1/events"])
         XCTAssertEqual(sent.count, 2)
         XCTAssertEqual(sent[0].headers["X-Blipit-Key"], "blipit_pk_test")
+        XCTAssertEqual(sent[0].headers["X-Blipit-Sdk"], "blipit-swift/\(Blipit.version)")
         let error = sent[0].body
         assertMatchesSchema(error)
         assertMatchesSchema(sent[1].body)
@@ -771,7 +772,7 @@ final class NuggetsTests: XCTestCase {
         XCTAssertEqual(sent.path, "/api/v1/events")
         XCTAssertEqual(sent.headers["X-Blipit-Key"], "blipit_pk_test")
         XCTAssertEqual((sent.body["stuck"] as? [String: Any])?["flow"] as? String, "sign-in")
-        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.7.1")
+        XCTAssertEqual((sent.body["sdk"] as? [String: String])?["version"], "0.7.2")
     }
 
     func testPrivacyManifestDeclaresWhatTheSdkUses() throws {

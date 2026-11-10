@@ -103,6 +103,7 @@ public final class ReportClient {
         if PlatformMismatch.blocked { return done(.failure(ReportError.http(409))) }
         var request = request
         request.setValue(key, forHTTPHeaderField: "X-Blipit-Key")
+        request.setValue(Blipit.sdkHeader, forHTTPHeaderField: "X-Blipit-Sdk")
         session.dataTask(with: request) { data, response, error in
             if let error { return done(.failure(error)) }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0

@@ -1,3 +1,6 @@
+## 0.7.2
+- Every request to Blipit (events, sessions, traces, bug reports and their uploads) sends `X-Blipit-Sdk: blipit-swift/<version>`, so the update card in Blipit always shows the version you run.
+
 ## 0.7.1
 - One `StartupFailed` per launch: after the first `captureStartup` or `reportReady(failed:)` of a launch, later calls in the same launch send nothing, so one failed start is one issue instead of one per reason. Call `captureStartup` with the most specific error first (for example the keychain read), before any general reason.
 - `since_start_ms` counts from the moment the process started, not from the first startup call, so the first report of a launch no longer shows 0.
