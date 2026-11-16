@@ -9,7 +9,7 @@ Since 0.5.0 the package runs on blipit-nuggets, Blipit's own crash and error cor
 In Xcode, File > Add Package Dependencies and enter `https://github.com/blipit-io/blipit-swift`, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.7.2")
+.package(url: "https://github.com/blipit-io/blipit-swift", from: "0.8.0")
 ```
 
 and add `BlipitSwift` to your target's dependencies.
@@ -124,6 +124,8 @@ Blipit.showReport()
 ```
 
 The reporter asks first: Take a screenshot, Record a video (in-app ReplayKit, only your app is recorded) or Skip. The screenshot opens full screen with the tools above and below it; pinch or double-tap to zoom, mark the problem, then add a title and what happened and send. Reports arrive under Bug reports at app.blipit.io.
+
+The button and every reporter screen follow your app: light or dark mode, your window's `tintColor` for the primary button and focused fields (Blipit blue when you set none), system fonts with Dynamic Type, and right to left in Arabic.
 
 ### Report from the screen with the bug
 

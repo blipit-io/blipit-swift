@@ -3,12 +3,47 @@ import UIKit
 
 @available(iOS 15.0, *)
 enum ReportTheme {
-    static let navy = UIColor(red: 11 / 255, green: 26 / 255, blue: 58 / 255, alpha: 1)
-    static let card = UIColor(red: 26 / 255, green: 33 / 255, blue: 53 / 255, alpha: 1)
-    static let brand = UIColor(red: 56 / 255, green: 130 / 255, blue: 246 / 255, alpha: 1)
-    static let muted = UIColor(red: 152 / 255, green: 166 / 255, blue: 190 / 255, alpha: 1)
     static let mark = UIColor(red: 1, green: 59 / 255, blue: 48 / 255, alpha: 1)
-    static let danger = UIColor(red: 1, green: 122 / 255, blue: 110 / 255, alpha: 1)
+    static let fallback = UIColor(red: 42 / 255, green: 111 / 255, blue: 220 / 255, alpha: 1)
+    static let background = UIColor.systemBackground
+    static let soft = UIColor.secondarySystemBackground
+    static let fg = UIColor.label
+    static let muted = UIColor.secondaryLabel
+    static let danger = UIColor.systemRed
+    static let line = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.12) : UIColor(red: 15 / 255, green: 23 / 255, blue: 42 / 255, alpha: 0.12) }
+
+    static var brand: UIColor {
+        let light = UITraitCollection(userInterfaceStyle: .light)
+        guard let tint = ReportFlow.keyWindow()?.tintColor,
+              !tint.resolvedColor(with: light).isEqual(UIColor.systemBlue.resolvedColor(with: light)) else { return fallback }
+        return tint
+    }
+
+    static func on(_ color: UIColor) -> UIColor {
+        var white: CGFloat = 0
+        color.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).getWhite(&white, alpha: nil)
+        return white > 0.7 ? UIColor(red: 15 / 255, green: 23 / 255, blue: 42 / 255, alpha: 1) : .white
+    }
+}
+
+@available(iOS 15.0, *)
+class ReportScreen: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = ReportTheme.background
+    }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        ReportUI.paint(view)
+    }
+}
+
+@available(iOS 15.0, *)
+final class ReportButton: UIButton {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
+    }
 }
 
 @available(iOS 15.0, *)
@@ -48,24 +83,20 @@ extension Blipit {
 
     static func placeButton() {
         guard reportButton == nil, let window = ReportFlow.keyWindow() else { return }
-        let button = UIButton(type: .system)
-        button.setTitle(" " + ReportLanguage.text("title"), for: .normal)
-        button.setImage(UIImage(systemName: "exclamationmark.bubble.fill"), for: .normal)
-        button.tintColor = .white
-        button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-        button.backgroundColor = ReportTheme.brand
-        button.layer.cornerRadius = 22
+        var config = ReportUI.filled(ReportLanguage.text("title"))
+        config.image = UIImage(systemName: "exclamationmark.bubble", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold))
+        config.imagePadding = 6
+        let button = ReportButton(configuration: config)
         button.layer.shadowColor = UIColor.black.cgColor
-        button.layer.shadowOpacity = 0.25
-        button.layer.shadowRadius = 10
-        button.layer.shadowOffset = CGSize(width: 0, height: 4)
-        button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 18)
+        button.layer.shadowOpacity = 0.12
+        button.layer.shadowRadius = 6
+        button.layer.shadowOffset = CGSize(width: 0, height: 2)
         button.accessibilityLabel = ReportLanguage.text("title")
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addAction(UIAction { _ in showReport() }, for: .touchUpInside)
         window.addSubview(button)
         NSLayoutConstraint.activate([
-            button.heightAnchor.constraint(equalToConstant: 44),
+            button.heightAnchor.constraint(equalToConstant: 40),
             button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -16),
         ])
@@ -200,7 +231,7 @@ final class ReportFlow {
 }
 
 @available(iOS 15.0, *)
-final class ReportChoiceController: UIViewController {
+final class ReportChoiceController: ReportScreen {
     let flow: ReportFlow
 
     init(flow: ReportFlow) {
@@ -212,12 +243,10 @@ final class ReportChoiceController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = ReportTheme.navy
-        overrideUserInterfaceStyle = .dark
         let close = ReportUI.bar(flow.t("close"), image: "xmark") { [weak self] in
             self?.dismiss(animated: true) { self?.flow.finish() }
         }
-        let title = ReportUI.label(flow.t("mHow"), size: 24, weight: .bold)
+        let title = ReportUI.label(flow.t("mHow"), size: 20, weight: .semibold)
         title.numberOfLines = 0
         var cards = [
             ReportUI.card(flow.t("mShot"), sub: nil, image: "camera.viewfinder") { [weak self] in
@@ -237,8 +266,8 @@ final class ReportChoiceController: UIViewController {
         })
         let stack = UIStackView(arrangedSubviews: [title] + cards)
         stack.axis = .vertical
-        stack.spacing = 14
-        stack.setCustomSpacing(24, after: title)
+        stack.spacing = 10
+        stack.setCustomSpacing(20, after: title)
         [close, stack].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
@@ -255,7 +284,7 @@ final class ReportChoiceController: UIViewController {
 }
 
 @available(iOS 15.0, *)
-final class ReportEditorController: UIViewController, UIScrollViewDelegate {
+final class ReportEditorController: ReportScreen, UIScrollViewDelegate {
     let flow: ReportFlow
     let image: UIImage
     let scroll = UIScrollView()
@@ -279,8 +308,6 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = ReportTheme.navy
-        overrideUserInterfaceStyle = .dark
 
         let back = ReportUI.bar(flow.t("mBack"), image: "chevron.backward") { [weak self] in
             guard let self else { return }
@@ -290,7 +317,8 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
         let zoomOut = ReportUI.icon("minus.magnifyingglass", flow.t("mZoomOut")) { [weak self] in self?.zoom(by: 1 / 1.5) }
         let zoomIn = ReportUI.icon("plus.magnifyingglass", flow.t("mZoomIn")) { [weak self] in self?.zoom(by: 1.5) }
         zoomLabel.textColor = ReportTheme.muted
-        zoomLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        zoomLabel.font = UIFontMetrics.default.scaledFont(for: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
+        zoomLabel.adjustsFontForContentSizeCategory = true
         zoomLabel.textAlignment = .center
         zoomLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
         let next = ReportUI.primary(flow.t("mNext")) { [weak self] in
@@ -309,7 +337,7 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
         scroll.showsHorizontalScrollIndicator = false
         scroll.panGestureRecognizer.minimumNumberOfTouches = 2
         scroll.contentInsetAdjustmentBehavior = .never
-        scroll.backgroundColor = UIColor.black.withAlphaComponent(0.25)
+        scroll.backgroundColor = ReportTheme.soft
         imageView.contentMode = .scaleToFill
         content.addSubview(imageView)
         content.addSubview(canvas)
@@ -332,7 +360,8 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
         tools.distribution = .fillEqually
         selectTool(.pen)
 
-        [top, scroll, tools].forEach {
+        let upper = ReportUI.rule(), lower = ReportUI.rule()
+        [top, scroll, tools, upper, lower].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
@@ -342,10 +371,16 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
             top.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 8),
             top.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -10),
             top.heightAnchor.constraint(equalToConstant: 48),
-            scroll.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 6),
+            upper.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 6),
+            upper.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            upper.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: upper.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: tools.topAnchor, constant: -6),
+            scroll.bottomAnchor.constraint(equalTo: lower.topAnchor),
+            lower.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            lower.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            lower.bottomAnchor.constraint(equalTo: tools.topAnchor, constant: -6),
             tools.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 8),
             tools.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -8),
             tools.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -4),
@@ -420,9 +455,8 @@ final class ReportEditorController: UIViewController, UIScrollViewDelegate {
         self.tool = tool
         for (key, button) in toolButtons {
             let on = key == tool
-            button.tintColor = on ? .white : ReportTheme.muted
-            button.setTitleColor(on ? .white : ReportTheme.muted, for: .normal)
-            button.backgroundColor = on ? ReportTheme.brand : .clear
+            button.configuration?.baseForegroundColor = on ? ReportTheme.fg : ReportTheme.muted
+            button.configuration?.background.backgroundColor = on ? ReportTheme.soft : .clear
             button.accessibilityTraits = on ? [.button, .selected] : .button
         }
     }
@@ -517,7 +551,7 @@ final class ReportCanvas: UIView {
 }
 
 @available(iOS 15.0, *)
-final class ReportDetailsController: UIViewController {
+final class ReportDetailsController: ReportScreen {
     let flow: ReportFlow
     let notice: String?
     let titleField = UITextField()
@@ -539,8 +573,6 @@ final class ReportDetailsController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = ReportTheme.navy
-        overrideUserInterfaceStyle = .dark
 
         let back = ReportUI.bar(flow.t("mBack"), image: "chevron.backward") { [weak self] in
             guard let self, !self.busy else { return }
@@ -553,24 +585,30 @@ final class ReportDetailsController: UIViewController {
             }
         }
         send = ReportUI.primary(flow.t("send")) { [weak self] in self?.submit() }
-        spinner.color = .white
+        spinner.color = ReportTheme.muted
         let top = UIStackView(arrangedSubviews: [back, UIView(), spinner, send])
         top.alignment = .center
         top.spacing = 8
 
-        let heading = ReportUI.label(flow.t("title"), size: 22, weight: .bold)
+        let heading = ReportUI.label(flow.t("title"), size: 20, weight: .semibold)
         var rows: [UIView] = [heading]
         if let preview = flow.flattened() {
             let thumb = UIImageView(image: preview)
             thumb.contentMode = .scaleAspectFit
-            thumb.layer.cornerRadius = 10
+            thumb.layer.cornerRadius = 8
             thumb.clipsToBounds = true
-            thumb.backgroundColor = ReportTheme.card
+            thumb.backgroundColor = ReportTheme.soft
+            ReportUI.outline(thumb)
             thumb.heightAnchor.constraint(equalToConstant: 140).isActive = true
             rows.append(thumb)
         } else if let video = flow.video {
-            let line = ReportUI.label("▶︎  " + flow.t("recordTitle") + "  ·  " + String(format: "%d:%02d", video.durationMs / 60_000, video.durationMs / 1000 % 60), size: 15, weight: .medium)
-            rows.append(line)
+            let icon = UIImageView(image: UIImage(systemName: "play.rectangle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)))
+            icon.tintColor = ReportTheme.muted
+            let line = ReportUI.label(flow.t("recordTitle") + " · " + String(format: "%d:%02d", video.durationMs / 60_000, video.durationMs / 1000 % 60), size: 15, weight: .medium)
+            let row = UIStackView(arrangedSubviews: [icon, line])
+            row.spacing = 8
+            row.alignment = .center
+            rows.append(row)
         }
         if let notice {
             let line = ReportUI.label(notice, size: 14, weight: .regular)
@@ -584,16 +622,19 @@ final class ReportDetailsController: UIViewController {
         email.autocapitalizationType = .none
         email.autocorrectionType = .no
         email.textContentType = .emailAddress
-        message.font = .systemFont(ofSize: 16)
-        message.textColor = .white
-        message.backgroundColor = ReportTheme.card
-        message.layer.cornerRadius = 12
+        message.font = ReportUI.font(16, .regular)
+        message.adjustsFontForContentSizeCategory = true
+        message.textColor = ReportTheme.fg
+        message.backgroundColor = ReportTheme.background
+        message.layer.cornerRadius = 8
+        ReportUI.outline(message)
         message.textContainerInset = UIEdgeInsets(top: 12, left: 10, bottom: 12, right: 10)
         message.heightAnchor.constraint(equalToConstant: 130).isActive = true
         message.accessibilityLabel = flow.t("fDesc")
         placeholder.text = flow.t("fDesc")
-        placeholder.textColor = ReportTheme.muted
-        placeholder.font = .systemFont(ofSize: 16)
+        placeholder.textColor = .placeholderText
+        placeholder.font = ReportUI.font(16, .regular)
+        placeholder.adjustsFontForContentSizeCategory = true
         placeholder.translatesAutoresizingMaskIntoConstraints = false
         message.addSubview(placeholder)
         NSLayoutConstraint.activate([
@@ -603,8 +644,15 @@ final class ReportDetailsController: UIViewController {
         NotificationCenter.default.addObserver(forName: UITextView.textDidChangeNotification, object: message, queue: .main) { [weak self] _ in
             self?.placeholder.isHidden = !(self?.message.text.isEmpty ?? true)
         }
+        NotificationCenter.default.addObserver(forName: UITextView.textDidBeginEditingNotification, object: message, queue: .main) { [weak self] _ in
+            if let self { ReportUI.focus(self.message, true) }
+        }
+        NotificationCenter.default.addObserver(forName: UITextView.textDidEndEditingNotification, object: message, queue: .main) { [weak self] _ in
+            if let self { ReportUI.focus(self.message, false) }
+        }
         status.numberOfLines = 0
-        status.font = .systemFont(ofSize: 14)
+        status.font = ReportUI.font(14, .regular)
+        status.adjustsFontForContentSizeCategory = true
         status.textColor = ReportTheme.muted
         rows += [titleField, message, email, status]
 
@@ -616,7 +664,8 @@ final class ReportDetailsController: UIViewController {
         scroll.alwaysBounceVertical = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(stack)
-        [top, scroll].forEach {
+        let rule = ReportUI.rule()
+        [top, rule, scroll].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
@@ -626,11 +675,14 @@ final class ReportDetailsController: UIViewController {
             top.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 8),
             top.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -10),
             top.heightAnchor.constraint(equalToConstant: 48),
-            scroll.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 4),
+            rule.topAnchor.constraint(equalTo: top.bottomAnchor, constant: 6),
+            rule.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            rule.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: rule.bottomAnchor, constant: 4),
             scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 8),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 16),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -20),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
@@ -750,80 +802,138 @@ enum ReportDevice {
 
 @available(iOS 15.0, *)
 enum ReportUI {
+    static func font(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
+        UIFontMetrics.default.scaledFont(for: .systemFont(ofSize: size, weight: weight))
+    }
+
+    static func text(_ size: CGFloat, _ weight: UIFont.Weight) -> UIConfigurationTextAttributesTransformer {
+        UIConfigurationTextAttributesTransformer { attributes in
+            var attributes = attributes
+            attributes.font = font(size, weight)
+            return attributes
+        }
+    }
+
     static func label(_ text: String, size: CGFloat, weight: UIFont.Weight) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.textColor = .white
-        label.font = .systemFont(ofSize: size, weight: weight)
+        label.textColor = ReportTheme.fg
+        label.font = font(size, weight)
         label.adjustsFontForContentSizeCategory = true
         return label
     }
 
-    static func bar(_ title: String, image: String, _ action: @escaping () -> Void) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setImage(UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
-        button.setTitle(" " + title, for: .normal)
-        button.tintColor = .white
-        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+    static func rule() -> UIView {
+        let rule = UIView()
+        rule.backgroundColor = .separator
+        rule.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale).isActive = true
+        return rule
+    }
+
+    static func outline(_ view: UIView, _ color: UIColor = ReportTheme.line, width: CGFloat = 1) {
+        view.layer.borderWidth = width
+        view.layer.setValue(color, forKey: "blipitBorder")
+        view.layer.borderColor = color.resolvedColor(with: view.traitCollection).cgColor
+    }
+
+    static func focus(_ view: UIView, _ on: Bool) {
+        outline(view, on ? ReportTheme.brand : ReportTheme.line, width: on ? 2 : 1)
+    }
+
+    static func paint(_ view: UIView) {
+        if let color = view.layer.value(forKey: "blipitBorder") as? UIColor {
+            view.layer.borderColor = color.resolvedColor(with: view.traitCollection).cgColor
+        }
+        view.subviews.forEach(paint)
+    }
+
+    static func filled(_ title: String) -> UIButton.Configuration {
+        let brand = ReportTheme.brand
+        var config = UIButton.Configuration.filled()
+        config.title = title
+        config.baseBackgroundColor = brand
+        config.baseForegroundColor = ReportTheme.on(brand)
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 8
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+        config.titleTextAttributesTransformer = text(15, .semibold)
+        return config
+    }
+
+    static func make(_ config: UIButton.Configuration, height: CGFloat, _ action: @escaping () -> Void) -> UIButton {
+        let button = ReportButton(configuration: config, primaryAction: UIAction { _ in action() })
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: height).isActive = true
         return button
     }
 
+    static func bar(_ title: String, image: String, _ action: @escaping () -> Void) -> UIButton {
+        var config = UIButton.Configuration.plain()
+        config.title = title
+        config.image = UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
+        config.imagePadding = 4
+        config.baseForegroundColor = ReportTheme.fg
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
+        config.titleTextAttributesTransformer = text(15, .medium)
+        return make(config, height: 44, action)
+    }
+
     static func icon(_ image: String, _ label: String, _ action: @escaping () -> Void) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setImage(UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
-        button.tintColor = .white
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
+        config.baseForegroundColor = ReportTheme.fg
+        let button = make(config, height: 44, action)
         button.accessibilityLabel = label
         button.widthAnchor.constraint(equalToConstant: 44).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
     }
 
     static func primary(_ title: String, _ action: @escaping () -> Void) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
-        button.backgroundColor = ReportTheme.brand
-        button.layer.cornerRadius = 12
-        button.contentEdgeInsets = UIEdgeInsets(top: 0, left: 18, bottom: 0, right: 18)
-        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
-        return button
+        make(filled(title), height: 40, action)
+    }
+
+    static func secondary(_ title: String, _ action: @escaping () -> Void) -> UIButton {
+        var config = UIButton.Configuration.plain()
+        config.title = title
+        config.baseForegroundColor = ReportTheme.fg
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 8
+        config.background.strokeColor = ReportTheme.line
+        config.background.strokeWidth = 1
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+        config.titleTextAttributesTransformer = text(15, .medium)
+        return make(config, height: 40, action)
     }
 
     static func tool(_ title: String, _ image: String, _ action: @escaping () -> Void) -> UIButton {
-        let button = UIButton(type: .system)
-        let symbol = UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
-        button.setImage(symbol, for: .normal)
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 11, weight: .medium)
-        button.titleLabel?.lineBreakMode = .byTruncatingTail
-        button.tintColor = ReportTheme.muted
-        button.setTitleColor(ReportTheme.muted, for: .normal)
-        button.layer.cornerRadius = 12
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 54).isActive = true
-        let size = symbol?.size ?? .zero
-        button.titleEdgeInsets = UIEdgeInsets(top: size.height + 8, left: -size.width, bottom: 0, right: 0)
-        button.imageEdgeInsets = UIEdgeInsets(top: -16, left: 0, bottom: 0, right: 0)
+        var config = UIButton.Configuration.plain()
+        config.title = title
+        config.image = UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
+        config.imagePlacement = .top
+        config.imagePadding = 4
+        config.baseForegroundColor = ReportTheme.muted
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 8
+        config.titleLineBreakMode = .byTruncatingTail
+        config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 2, bottom: 6, trailing: 2)
+        config.titleTextAttributesTransformer = text(11, .medium)
+        let button = make(config, height: 54, action)
         button.accessibilityLabel = title
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
     }
 
     static func card(_ title: String, sub: String?, image: String, _ action: @escaping () -> Void) -> UIControl {
         let control = UIControl()
-        control.backgroundColor = ReportTheme.card
-        control.layer.cornerRadius = 16
-        control.layer.borderWidth = 1
-        control.layer.borderColor = UIColor.white.withAlphaComponent(0.1).cgColor
-        let icon = UIImageView(image: UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)))
-        icon.tintColor = ReportTheme.brand
+        control.backgroundColor = ReportTheme.background
+        control.layer.cornerRadius = 12
+        outline(control)
+        let icon = UIImageView(image: UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)))
+        icon.tintColor = ReportTheme.fg
         icon.contentMode = .center
-        icon.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        let name = label(title, size: 17, weight: .semibold)
+        icon.backgroundColor = ReportTheme.soft
+        icon.layer.cornerRadius = 8
+        icon.widthAnchor.constraint(equalToConstant: 36).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        let name = label(title, size: 15, weight: .medium)
         name.numberOfLines = 0
         let texts = UIStackView(arrangedSubviews: [name])
         texts.axis = .vertical
@@ -835,35 +945,43 @@ enum ReportUI {
             texts.addArrangedSubview(line)
         }
         let row = UIStackView(arrangedSubviews: [icon, texts])
-        row.spacing = 14
+        row.spacing = 12
         row.alignment = .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         control.addSubview(row)
         NSLayoutConstraint.activate([
-            control.heightAnchor.constraint(greaterThanOrEqualToConstant: 64),
-            row.topAnchor.constraint(equalTo: control.topAnchor, constant: 14),
-            row.bottomAnchor.constraint(equalTo: control.bottomAnchor, constant: -14),
-            row.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 16),
-            row.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -16),
+            control.heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
+            row.topAnchor.constraint(equalTo: control.topAnchor, constant: 12),
+            row.bottomAnchor.constraint(equalTo: control.bottomAnchor, constant: -12),
+            row.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 12),
+            row.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -12),
         ])
         control.isAccessibilityElement = true
         control.accessibilityLabel = sub.map { "\(title), \($0)" } ?? title
         control.accessibilityTraits = .button
         control.addAction(UIAction { _ in action() }, for: .touchUpInside)
+        control.addAction(UIAction { _ in control.backgroundColor = ReportTheme.soft }, for: [.touchDown, .touchDragEnter])
+        control.addAction(UIAction { _ in control.backgroundColor = ReportTheme.background }, for: [.touchUpInside, .touchUpOutside, .touchDragExit, .touchCancel])
         return control
     }
 
     static func field(_ field: UITextField, _ placeholder: String) {
-        field.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.foregroundColor: ReportTheme.muted])
-        field.textColor = .white
-        field.font = .systemFont(ofSize: 16)
-        field.backgroundColor = ReportTheme.card
-        field.layer.cornerRadius = 12
-        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 1))
+        field.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.foregroundColor: UIColor.placeholderText])
+        field.textColor = ReportTheme.fg
+        field.font = font(16, .regular)
+        field.adjustsFontForContentSizeCategory = true
+        field.backgroundColor = ReportTheme.background
+        field.layer.cornerRadius = 8
+        outline(field)
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
         field.leftViewMode = .always
-        field.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        field.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
+        field.rightViewMode = .always
+        field.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         field.accessibilityLabel = placeholder
+        field.addAction(UIAction { _ in focus(field, true) }, for: .editingDidBegin)
+        field.addAction(UIAction { _ in focus(field, false) }, for: .editingDidEnd)
     }
 }
 #endif

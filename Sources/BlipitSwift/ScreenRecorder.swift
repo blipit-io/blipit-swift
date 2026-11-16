@@ -122,23 +122,27 @@ final class ScreenRecorder {
         dot.heightAnchor.constraint(equalToConstant: 10).isActive = true
         let text = UILabel()
         text.text = label
-        text.textColor = .white
-        text.font = .systemFont(ofSize: 14, weight: .semibold)
-        var config = UIButton.Configuration.filled()
-        config.title = stop
-        config.image = UIImage(systemName: "stop.fill")
+        text.textColor = .label
+        text.font = UIFontMetrics.default.scaledFont(for: .systemFont(ofSize: 14, weight: .medium))
+        text.adjustsFontForContentSizeCategory = true
+        var config = ReportUI.filled(stop)
+        config.image = UIImage(systemName: "stop.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
         config.imagePadding = 6
-        config.baseBackgroundColor = UIColor(red: 1, green: 59 / 255, blue: 48 / 255, alpha: 1)
-        config.cornerStyle = .capsule
-        let button = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in self?.stop() })
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        config.baseBackgroundColor = .systemRed
+        config.baseForegroundColor = .white
+        let button = ReportUI.make(config, height: 40) { [weak self] in self?.stop() }
         let row = UIStackView(arrangedSubviews: [dot, text, button])
         row.alignment = .center
         row.spacing = 10
         row.isLayoutMarginsRelativeArrangement = true
-        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 4)
-        row.backgroundColor = UIColor(red: 11 / 255, green: 26 / 255, blue: 58 / 255, alpha: 0.92)
-        row.layer.cornerRadius = 26
+        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 6)
+        row.backgroundColor = .systemBackground
+        row.layer.cornerRadius = 12
+        row.layer.shadowColor = UIColor.black.cgColor
+        row.layer.shadowOpacity = 0.12
+        row.layer.shadowRadius = 12
+        row.layer.shadowOffset = CGSize(width: 0, height: 6)
+        ReportUI.outline(row)
         row.translatesAutoresizingMaskIntoConstraints = false
         controller.view.addSubview(row)
         NSLayoutConstraint.activate([
@@ -147,6 +151,7 @@ final class ScreenRecorder {
         ])
         window.frame = scene.coordinateSpace.bounds
         window.isHidden = false
+        ReportUI.paint(row)
         pill = window
     }
 }

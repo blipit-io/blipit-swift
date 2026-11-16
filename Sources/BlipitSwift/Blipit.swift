@@ -5,7 +5,7 @@ import BlipitNuggets
 
 public enum Blipit {
     public static let defaultEndpoint = "https://in.blipit.io"
-    public static let version = "0.7.2"
+    public static let version = "0.8.0"
     static let sdkHeader = "blipit-swift/\(version)"
     public static let packageName = "swiftpm:blipit-swift"
     static var reporter: ReportClient?

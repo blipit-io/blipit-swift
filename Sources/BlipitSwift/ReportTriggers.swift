@@ -161,25 +161,17 @@ enum ReportTriggers {
         let t = { (key: String) in ReportLanguage.text(key, lang) }
         let rtl: UISemanticContentAttribute = lang == "ar" ? .forceRightToLeft : .unspecified
         let card = UIView()
-        card.backgroundColor = ReportTheme.card
-        card.layer.cornerRadius = 16
-        card.layer.borderWidth = 1
-        card.layer.borderColor = UIColor.white.withAlphaComponent(0.1).cgColor
+        card.backgroundColor = ReportTheme.background
+        card.layer.cornerRadius = 12
         card.layer.shadowColor = UIColor.black.cgColor
-        card.layer.shadowOpacity = 0.3
+        card.layer.shadowOpacity = 0.12
         card.layer.shadowRadius = 12
-        card.layer.shadowOffset = CGSize(width: 0, height: 4)
-        card.overrideUserInterfaceStyle = .dark
+        card.layer.shadowOffset = CGSize(width: 0, height: 6)
         card.semanticContentAttribute = rtl
-        let text = ReportUI.label(t(kind == .crash ? "crashAsk" : "shotAsk"), size: 15, weight: .semibold)
+        let text = ReportUI.label(t(kind == .crash ? "crashAsk" : "shotAsk"), size: 15, weight: .medium)
         text.numberOfLines = 0
         text.textAlignment = .natural
-        let later = UIButton(type: .system)
-        later.setTitle(t("notNow"), for: .normal)
-        later.setTitleColor(ReportTheme.muted, for: .normal)
-        later.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
-        later.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        later.addAction(UIAction { _ in choose(report: false) }, for: .touchUpInside)
+        let later = ReportUI.secondary(t("notNow")) { choose(report: false) }
         let go = ReportUI.primary(t(kind == .crash ? "tellUs" : "report")) { choose(report: true) }
         let buttons = UIStackView(arrangedSubviews: [UIView(), later, go])
         buttons.spacing = 8
@@ -193,6 +185,7 @@ enum ReportTriggers {
         card.addSubview(stack)
         card.translatesAutoresizingMaskIntoConstraints = false
         window.addSubview(card)
+        ReportUI.outline(card)
         let guide = window.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 14),
@@ -254,7 +247,7 @@ extension UIWindow {
 }
 
 @available(iOS 15.0, *)
-final class ReportPickerController: UIViewController {
+final class ReportPickerController: ReportScreen {
     let flow: ReportFlow
     let choices: [UIImage]
 
@@ -268,14 +261,12 @@ final class ReportPickerController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = ReportTheme.navy
-        overrideUserInterfaceStyle = .dark
         let back = ReportUI.bar(flow.t("mBack"), image: "chevron.backward") { [weak self] in
             guard let self else { return }
             self.flow.image = nil
             self.dismiss(animated: true) { self.flow.present(ReportChoiceController(flow: self.flow)) }
         }
-        let title = ReportUI.label(flow.t("pickTitle"), size: 24, weight: .bold)
+        let title = ReportUI.label(flow.t("pickTitle"), size: 20, weight: .semibold)
         title.numberOfLines = 0
         let row = UIStackView(arrangedSubviews: choices.enumerated().map { index, image in thumb(image, index) })
         row.spacing = 14
@@ -310,12 +301,11 @@ final class ReportPickerController: UIViewController {
         let control = UIControl()
         let picture = UIImageView(image: image)
         picture.contentMode = .scaleAspectFit
-        picture.layer.cornerRadius = 12
-        picture.layer.borderWidth = index == 0 ? 2 : 1
-        picture.layer.borderColor = (index == 0 ? ReportTheme.brand : UIColor.white.withAlphaComponent(0.15)).cgColor
+        picture.layer.cornerRadius = 8
+        ReportUI.outline(picture, index == 0 ? ReportTheme.brand : ReportTheme.line, width: index == 0 ? 2 : 1)
         picture.clipsToBounds = true
-        picture.backgroundColor = ReportTheme.card
-        let caption = ReportUI.label(flow.t(index == 0 ? "pickNow" : "pickBefore"), size: 14, weight: .medium)
+        picture.backgroundColor = ReportTheme.soft
+        let caption = ReportUI.label(flow.t(index == 0 ? "pickNow" : "pickBefore"), size: 13, weight: .medium)
         caption.textAlignment = .center
         let stack = UIStackView(arrangedSubviews: [picture, caption])
         stack.axis = .vertical

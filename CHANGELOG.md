@@ -1,3 +1,8 @@
+## 0.8.0
+- New look for the Report a bug button and the reporter, matching app.blipit.io: neutral system colours that follow your app's light or dark mode (it was always dark navy before), hairline borders, 8 pt corners on buttons and fields, 12 pt on cards, one filled primary button per screen and outlined secondary buttons. No gradients or glows; the floating button keeps a small shadow so it stays visible over your content.
+- The primary button and focused fields take your window's `tintColor`; with no tint set they use Blipit blue (#2A6FDC). Text on a light tint turns dark.
+- Text uses Dynamic Type, buttons keep a 44 pt touch area, VoiceOver labels and right-to-left layout are unchanged. The screenshot prompt, the screen picker and the recording bar follow the same look. No API change.
+
 ## 0.7.2
 - Every request to Blipit (events, sessions, traces, bug reports and their uploads) sends `X-Blipit-Sdk: blipit-swift/<version>`, so the update card in Blipit always shows the version you run.
 
