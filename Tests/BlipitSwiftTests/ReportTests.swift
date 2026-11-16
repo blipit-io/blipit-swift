@@ -260,6 +260,21 @@ final class ReportTests: XCTestCase {
         print("BLIPIT_SCREENS \(dir.path)")
     }
 
+    func testOutlineFollowsLightAndDarkLive() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 200, height: 100))
+        window.overrideUserInterfaceStyle = .light
+        let card = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 50))
+        window.addSubview(card)
+        window.isHidden = false
+        ReportUI.outline(card)
+        let light = card.layer.borderColor
+        window.overrideUserInterfaceStyle = .dark
+        window.layoutIfNeeded()
+        XCTAssertEqual(card.layer.borderColor, ReportTheme.line.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)).cgColor)
+        XCTAssertNotEqual(card.layer.borderColor, light)
+        window.isHidden = true
+    }
+
     static func pixel(_ image: CGImage, x: Int, y: Int) -> (r: Int, g: Int, b: Int) {
         var data = [UInt8](repeating: 0, count: 4)
         let ctx = CGContext(data: &data, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!

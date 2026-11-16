@@ -40,6 +40,22 @@ class ReportScreen: UIViewController {
 }
 
 @available(iOS 15.0, *)
+final class ReportTraitWatcher: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        if let host = superview, traitCollection.hasDifferentColorAppearance(comparedTo: previous) { ReportUI.paint(host) }
+    }
+}
+
+@available(iOS 15.0, *)
 final class ReportButton: UIButton {
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
@@ -278,7 +294,7 @@ final class ReportChoiceController: ReportScreen {
             close.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 12),
             stack.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -20),
-            stack.centerYAnchor.constraint(equalTo: guide.centerYAnchor),
+            stack.topAnchor.constraint(equalTo: close.bottomAnchor, constant: 20),
         ])
     }
 }
@@ -834,6 +850,9 @@ enum ReportUI {
         view.layer.borderWidth = width
         view.layer.setValue(color, forKey: "blipitBorder")
         view.layer.borderColor = color.resolvedColor(with: view.traitCollection).cgColor
+        if !view.subviews.contains(where: { $0 is ReportTraitWatcher }) {
+            view.addSubview(ReportTraitWatcher(frame: .zero))
+        }
     }
 
     static func focus(_ view: UIView, _ on: Bool) {
